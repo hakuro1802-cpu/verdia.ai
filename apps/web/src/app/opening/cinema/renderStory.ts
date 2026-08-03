@@ -112,7 +112,8 @@ export function createCinemaRenderer(canvas: HTMLCanvasElement) {
 
     drawSky(ctx, w, h, p, t);
     drawHills(ctx, w, h, p, t);
-    drawSoil(ctx, w, h);
+    drawFieldGrass(ctx, w, h, p, t);
+    drawSoilCutaway(ctx, w, h);
     drawRoots(ctx, w, h, p, t);
     drawPlant(ctx, w, h, p, t);
     drawButterflies(ctx, w, h, p, t);
@@ -220,60 +221,104 @@ function drawHills(
   p: ReturnType<typeof beatProgress>,
   t: number,
 ) {
-  const nightShade = 1 - p.dawn * 0.55;
-  // Far hills
+  // Far ridge
   ctx.beginPath();
-  ctx.moveTo(0, h * 0.68);
-  for (let x = 0; x <= w; x += 20) {
-    const y =
-      h * 0.66 +
-      Math.sin(x * 0.01 + 1) * 18 * nightShade +
-      Math.sin(x * 0.02 + t * 0.1) * 3;
+  ctx.moveTo(0, h * 0.58);
+  for (let x = 0; x <= w; x += 18) {
+    const y = h * 0.56 + Math.sin(x * 0.008 + 0.6) * 22 + Math.sin(x * 0.02 + t * 0.08) * 2;
     ctx.lineTo(x, y);
   }
-  ctx.lineTo(w, h);
-  ctx.lineTo(0, h);
+  ctx.lineTo(w, h * 0.72);
+  ctx.lineTo(0, h * 0.72);
   ctx.closePath();
-  ctx.fillStyle = p.dawn > 0.4 ? "#3f7a55" : "#143024";
+  const far = ctx.createLinearGradient(0, h * 0.5, 0, h * 0.72);
+  if (p.dawn > 0.35) {
+    far.addColorStop(0, "#5a9a6e");
+    far.addColorStop(1, "#2f5c40");
+  } else {
+    far.addColorStop(0, "#1a3a2a");
+    far.addColorStop(1, "#0c1c14");
+  }
+  ctx.fillStyle = far;
   ctx.fill();
 
-  // Near hills with grass shimmer
+  // Mid hills
   ctx.beginPath();
-  ctx.moveTo(0, h * 0.74);
-  for (let x = 0; x <= w; x += 16) {
-    const y = h * 0.73 + Math.sin(x * 0.015 + 2) * 14 + Math.sin(x * 0.05 + t * 0.8) * 1.5;
+  ctx.moveTo(0, h * 0.64);
+  for (let x = 0; x <= w; x += 14) {
+    const y = h * 0.63 + Math.sin(x * 0.012 + 2) * 16 + Math.sin(x * 0.04 + t * 0.5) * 1.2;
     ctx.lineTo(x, y);
   }
-  ctx.lineTo(w, h);
-  ctx.lineTo(0, h);
+  ctx.lineTo(w, h * 0.74);
+  ctx.lineTo(0, h * 0.74);
   ctx.closePath();
-  const hg = ctx.createLinearGradient(0, h * 0.7, 0, h);
-  hg.addColorStop(0, p.dawn > 0.4 ? "#4f9464" : "#1c4030");
-  hg.addColorStop(1, p.dawn > 0.4 ? "#2d5a3c" : "#0e2418");
-  ctx.fillStyle = hg;
+  const mid = ctx.createLinearGradient(0, h * 0.58, 0, h * 0.74);
+  if (p.dawn > 0.35) {
+    mid.addColorStop(0, "#4f9464");
+    mid.addColorStop(1, "#244a32");
+  } else {
+    mid.addColorStop(0, "#143024");
+    mid.addColorStop(1, "#0a1810");
+  }
+  ctx.fillStyle = mid;
   ctx.fill();
 }
 
-function drawSoil(ctx: CanvasRenderingContext2D, w: number, h: number) {
-  const top = h * 0.62;
-  const g = ctx.createLinearGradient(0, top, 0, h);
-  g.addColorStop(0, "#6a4a36");
-  g.addColorStop(0.35, "#3a261a");
-  g.addColorStop(1, "#140c08");
-  ctx.fillStyle = g;
-  ctx.fillRect(0, top, w, h - top);
+function drawFieldGrass(
+  ctx: CanvasRenderingContext2D,
+  w: number,
+  h: number,
+  p: ReturnType<typeof beatProgress>,
+  t: number,
+) {
+  const base = h * 0.68;
+  ctx.beginPath();
+  ctx.moveTo(0, base);
+  for (let x = 0; x <= w; x += 10) {
+    const y = base + Math.sin(x * 0.03 + t * 1.1) * 2.5;
+    ctx.lineTo(x, y);
+  }
+  ctx.lineTo(w, h * 0.78);
+  ctx.lineTo(0, h * 0.78);
+  ctx.closePath();
+  ctx.fillStyle = p.dawn > 0.4 ? "#3d6b48" : "#102418";
+  ctx.fill();
 
-  // Soil lip
-  ctx.fillStyle = "rgba(90,60,42,0.9)";
+  // Soft mist above field
+  const mist = ctx.createLinearGradient(0, h * 0.55, 0, h * 0.72);
+  mist.addColorStop(0, "rgba(180,210,230,0)");
+  mist.addColorStop(1, `rgba(180,210,230,${0.08 + 0.1 * p.dawn})`);
+  ctx.fillStyle = mist;
+  ctx.fillRect(0, h * 0.55, w, h * 0.2);
+}
+
+function drawSoilCutaway(ctx: CanvasRenderingContext2D, w: number, h: number) {
+  const top = h * 0.7;
+  const g = ctx.createLinearGradient(0, top, 0, h);
+  g.addColorStop(0, "#7a5640");
+  g.addColorStop(0.2, "#5a3c2a");
+  g.addColorStop(0.55, "#2e1c12");
+  g.addColorStop(1, "#0e0806");
+  ctx.fillStyle = g;
   ctx.beginPath();
   ctx.moveTo(0, top);
-  for (let x = 0; x <= w; x += 12) {
-    ctx.lineTo(x, top + Math.sin(x * 0.04) * 2);
+  for (let x = 0; x <= w; x += 10) {
+    ctx.lineTo(x, top + Math.sin(x * 0.05) * 2.5);
   }
-  ctx.lineTo(w, top + 10);
-  ctx.lineTo(0, top + 10);
+  ctx.lineTo(w, h);
+  ctx.lineTo(0, h);
   ctx.closePath();
   ctx.fill();
+
+  // Cutaway highlight edge
+  ctx.strokeStyle = "rgba(255,220,180,0.12)";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(0, top);
+  for (let x = 0; x <= w; x += 10) {
+    ctx.lineTo(x, top + Math.sin(x * 0.05) * 2.5);
+  }
+  ctx.stroke();
 }
 
 function drawRoots(
@@ -286,7 +331,7 @@ function drawRoots(
   const reveal = Math.max(p.grow * 0.3, p.answer, p.mind);
   if (reveal <= 0.01) return;
   const cx = w * 0.5;
-  const cy = h * 0.66;
+  const cy = h * 0.72;
   ctx.save();
   ctx.lineCap = "round";
   ctx.lineWidth = 2;
@@ -326,7 +371,7 @@ function drawPlant(
   t: number,
 ) {
   const cx = w * 0.5;
-  const soilY = h * 0.64;
+  const soilY = h * 0.7;
 
   // Seed — squash/stretch breathe (Pixar appeal)
   if (p.seed > 0 && p.grow < 0.85) {
