@@ -1,28 +1,25 @@
 # momo.ai
 
-Plant care / smart agriculture OS — built **part by part**.
+Smart agriculture OS — built **part by part**.
 
-## Part 1 — Cinematic opening
+## Part 1 — Story opening (30s)
 
-Master boot sequence (cold **5s** / warm return **1.5s**):
+A **2D illustrated story** in the spirit of Disney / Pixar intros — letterboxed, captioned, soft motion — then morphs into glass Home.
 
-1. Dark ambient awaken  
-2. Pollen → logo core  
-3. Roots, leaves, mist  
-4. Neural merge + **MOMO.AI** / *Growing Intelligence. Growing Tomorrow.*  
-5. Camera push → morphs into glass **Home** (no spinner)
+| Mode | Length |
+|------|--------|
+| First launch (cold) | **30 seconds** |
+| Return (warm) | **~4 seconds** title card |
+
+Story beats: night field → seed → morning sprout → world answers → intelligence → **MOMO.AI** crest.
 
 ```bash
 npm install
 npm start
 ```
 
-Preview: **port 8787** (`0.0.0.0`). Hard-refresh.  
-Replay full cinematic: `localStorage.removeItem('momo.ai.hasLaunched')` then reload.
-
-### Honest gaps (not fabricated)
-- Licensed nature bed + soft “Welcome to MOMO.” whisper — procedural ambience + activation tone for now  
-- Full Unreal volumetric forest — stylized spatial scene matching the phase brief
+Preview **port 8787**. Full story: `/?boot=cold`  
+Replay: `localStorage.removeItem('momo.ai.hasLaunched')`
 
 ## Next
-Part 2 — Home live data into the glass panels.
+Part 2 — Home live data.

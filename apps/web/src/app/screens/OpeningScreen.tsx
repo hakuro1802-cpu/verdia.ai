@@ -1,99 +1,81 @@
-import { useEffect, useMemo, useState, type CSSProperties } from "react";
-import { markLaunched, readBootProfile } from "../opening/bootTiming";
+import { useEffect, useMemo, useState } from "react";
+import {
+  markLaunched,
+  readBootProfile,
+  type StoryBeatId,
+} from "../opening/bootTiming";
 import { createOpeningSoundscape } from "../opening/openingSound";
-import { OpeningAtmosphere } from "./OpeningAtmosphere";
-
-export type CinematicPhase = "dark" | "awaken" | "ecosystem" | "intelligence" | "transit";
+import { StoryReel } from "../opening/StoryReel";
 
 type Props = {
   onFinished: () => void;
 };
 
 /**
- * MOMO.AI cinematic opening — master boot sequence.
- * Cold: 5s · Warm return: 1.5s · Morphs into Home (no spinner).
+ * 30-second illustrated story opening (Disney/Pixar intro spirit).
+ * Warm returns get a short title card (~4s).
  */
 export function OpeningScreen({ onFinished }: Props) {
   const profile = useMemo(() => readBootProfile(), []);
-  const [phase, setPhase] = useState<CinematicPhase>("dark");
-  const [tilt, setTilt] = useState({ x: 0, y: 0 });
-  const reduced =
-    typeof window !== "undefined" &&
-    window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+  const first = profile.beats[0]!;
+  const [beat, setBeat] = useState<StoryBeatId>(first.id);
+  const [caption, setCaption] = useState(first.caption);
+  const [captionKey, setCaptionKey] = useState(0);
 
   useEffect(() => {
+    let cancelled = false;
     const sound = createOpeningSoundscape();
     void sound.start();
 
-    const { phases } = profile;
-    const timers = [
-      window.setTimeout(() => setPhase("awaken"), phases.dark),
+    const timers = profile.beats.map((b) =>
       window.setTimeout(() => {
-        setPhase("ecosystem");
-        sound.pulse();
-      }, phases.awaken),
-      window.setTimeout(() => setPhase("intelligence"), phases.ecosystem),
+        if (cancelled) return;
+        setBeat(b.id);
+        setCaption(b.caption);
+        setCaptionKey((k) => k + 1);
+        if (b.id === "morning" || b.id === "title") sound.swell();
+      }, b.startMs),
+    );
+
+    timers.push(
       window.setTimeout(() => {
-        setPhase("transit");
-        sound.pulse();
-      }, phases.intelligence),
-      window.setTimeout(() => {
+        if (cancelled) return;
         markLaunched();
         sound.stop();
         onFinished();
-      }, phases.transit),
-    ];
+      }, profile.durationMs),
+    );
 
     return () => {
+      cancelled = true;
       timers.forEach(clearTimeout);
       sound.stop();
     };
   }, [onFinished, profile]);
 
-  useEffect(() => {
-    const onOrient = (e: DeviceOrientationEvent) => {
-      const x = ((e.gamma ?? 0) / 45) * 6;
-      const y = (((e.beta ?? 45) - 45) / 45) * 4;
-      setTilt({ x: Math.max(-8, Math.min(8, x)), y: Math.max(-6, Math.min(6, y)) });
-    };
-    window.addEventListener("deviceorientation", onOrient);
-    return () => window.removeEventListener("deviceorientation", onOrient);
-  }, []);
-
   return (
     <section
-      className={`opening cinematic phase-${phase} mode-${profile.mode}`}
-      aria-label="MOMO.AI opening"
-      style={
-        {
-          "--tilt-x": `${tilt.x}px`,
-          "--tilt-y": `${tilt.y}px`,
-        } as CSSProperties
-      }
+      className={`story-opening mode-${profile.mode} beat-${beat}`}
+      aria-label="MOMO.AI story opening"
+      data-boot={profile.mode}
+      data-duration={profile.durationMs}
     >
-      <OpeningAtmosphere phase={phase} reduced={!!reduced} />
-      <div className="opening-veil" />
-      <div className="opening-bloom" />
+      <StoryReel beat={beat} warmOnly={profile.mode === "warm"} />
 
-      <div className="opening-stage">
-        <div className="opening-brand-block">
-          <p className="cinematic-mark">MOMO.AI</p>
-          <p className="cinematic-tagline">
-            <span>Growing Intelligence.</span>
-            <span>Growing Tomorrow.</span>
-          </p>
-        </div>
-      </div>
+      <div className="story-letterbox top" />
+      <div className="story-letterbox bottom" />
 
-      <div className="opening-progress cinematic" aria-hidden>
-        <span className={phase !== "dark" ? "on" : ""} />
-        <span
-          className={
-            phase === "ecosystem" || phase === "intelligence" || phase === "transit" ? "on" : ""
-          }
+      {caption ? (
+        <p key={captionKey} className="story-caption">
+          {caption}
+        </p>
+      ) : null}
+
+      <div className="story-progress" aria-hidden>
+        <div
+          className="story-progress-bar"
+          style={{ animationDuration: `${profile.durationMs}ms` }}
         />
-        <span className={phase === "intelligence" || phase === "transit" ? "on" : ""} />
-        <span className={phase === "transit" ? "on" : ""} />
       </div>
     </section>
   );
