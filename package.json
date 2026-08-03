@@ -1,0 +1,24 @@
+{
+  "name": "momo-ai",
+  "private": true,
+  "version": "0.1.0",
+  "description": "momo.ai — plant care app (built part by part)",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "npm run build -w @verdia/web && npm run dev -w @verdia/api",
+    "dev:api": "npm run build -w @verdia/web && npm run dev -w @verdia/api",
+    "dev:web": "npm run dev -w @verdia/web",
+    "build": "npm run build -w @verdia/contracts && npm run build -w @verdia/web && npm run build -w @verdia/api",
+    "build:contracts": "npm run build -w @verdia/contracts",
+    "start": "npm run build && npm run start -w @verdia/api",
+    "start:api": "npm run start -w @verdia/api",
+    "test": "npm run test -w @verdia/contracts && npm run test -w @verdia/api",
+    "typecheck": "npm run typecheck -w @verdia/contracts && npm run typecheck -w @verdia/api && npm run typecheck -w @verdia/web"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
