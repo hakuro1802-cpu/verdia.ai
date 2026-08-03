@@ -5,15 +5,14 @@ import {
   type StoryBeatId,
 } from "../opening/bootTiming";
 import { createOpeningSoundscape } from "../opening/openingSound";
-import { StoryReel } from "../opening/StoryReel";
+import { StoryCinema } from "../opening/StoryCinema";
 
 type Props = {
   onFinished: () => void;
 };
 
 /**
- * 30-second illustrated story opening (Disney/Pixar intro spirit).
- * Warm returns get a short title card (~4s).
+ * Part 1 — Immersive 30s cinematic story opening.
  */
 export function OpeningScreen({ onFinished }: Props) {
   const profile = useMemo(() => readBootProfile(), []);
@@ -21,11 +20,13 @@ export function OpeningScreen({ onFinished }: Props) {
   const [beat, setBeat] = useState<StoryBeatId>(first.id);
   const [caption, setCaption] = useState(first.caption);
   const [captionKey, setCaptionKey] = useState(0);
+  const [time, setTime] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
     const sound = createOpeningSoundscape();
     void sound.start();
+    const t0 = performance.now();
 
     const timers = profile.beats.map((b) =>
       window.setTimeout(() => {
@@ -46,27 +47,43 @@ export function OpeningScreen({ onFinished }: Props) {
       }, profile.durationMs),
     );
 
+    let raf = 0;
+    const tick = (now: number) => {
+      if (cancelled) return;
+      setTime(Math.min(profile.durationMs / 1000, (now - t0) / 1000));
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+
     return () => {
       cancelled = true;
       timers.forEach(clearTimeout);
+      cancelAnimationFrame(raf);
       sound.stop();
     };
   }, [onFinished, profile]);
 
   return (
     <section
-      className={`story-opening mode-${profile.mode} beat-${beat}`}
-      aria-label="MOMO.AI story opening"
+      className={`story-opening immersive mode-${profile.mode} beat-${beat}`}
+      aria-label="MOMO.AI cinematic opening"
       data-boot={profile.mode}
       data-duration={profile.durationMs}
     >
-      <StoryReel beat={beat} warmOnly={profile.mode === "warm"} />
+      <div className="story-cinema-stage">
+        <StoryCinema
+          time={time}
+          duration={profile.durationMs / 1000}
+          warm={profile.mode === "warm"}
+        />
+      </div>
 
       <div className="story-letterbox top" />
       <div className="story-letterbox bottom" />
+      <div className="story-film-frame" aria-hidden />
 
       {caption ? (
-        <p key={captionKey} className="story-caption">
+        <p key={captionKey} className="story-caption cinematic-caption">
           {caption}
         </p>
       ) : null}
