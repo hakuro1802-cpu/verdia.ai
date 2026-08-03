@@ -1,0 +1,11 @@
+{
+  "name": "verdia-ai",
+  "private": true,
+  "scripts": {
+    "dev": "pnpm --dir web dev",
+    "build": "pnpm --dir web build",
+    "lint": "pnpm --dir web lint",
+    "test": "pnpm --dir web test",
+    "preview": "pnpm --dir web preview"
+  }
+}
