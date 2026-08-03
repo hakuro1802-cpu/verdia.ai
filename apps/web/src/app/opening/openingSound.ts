@@ -1,12 +1,20 @@
+import type { BeatId } from "./bootTiming";
+
 /**
- * Soft story score — gentle musical bed.
- * Starts muted until a user gesture (browser autoplay policy).
+ * Soft aurora pad — muted until a user gesture (autoplay policy).
  */
-export function createOpeningSoundscape() {
+export function createOpeningAmbience() {
   const AC =
     window.AudioContext ||
     (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-  if (!AC) return { start: async () => {}, stop: () => {}, swell: () => {} };
+
+  if (!AC) {
+    return {
+      unlock: async () => false,
+      setIntensity: (_beat: BeatId) => undefined,
+      stop: () => undefined,
+    };
+  }
 
   let ctx: AudioContext | null = null;
   let master: GainNode | null = null;
@@ -37,50 +45,55 @@ export function createOpeningSoundscape() {
     nodes.push(osc);
   }
 
-  async function unlockAndStart() {
-    if (stopped || started) return;
-    const c = ensureCtx();
-    if (c.state === "suspended") await c.resume();
-    started = true;
-    tone(196, "sine", 0.03);
-    tone(246.94, "sine", 0.022);
-    tone(293.66, "triangle", 0.012);
-    const t = c.currentTime;
-    master!.gain.setValueAtTime(0, t);
-    master!.gain.linearRampToValueAtTime(0.7, t + 2.5);
-  }
-
-  async function start() {
-    // Try immediately; if blocked, wait for first gesture
+  async function unlock(): Promise<boolean> {
+    if (stopped) return false;
     try {
-      await unlockAndStart();
+      const c = ensureCtx();
+      if (c.state === "suspended") await c.resume();
+      if (!started) {
+        started = true;
+        // Brighter, warmer pad for Aurora Meadow
+        tone(220, "sine", 0.028);
+        tone(277.18, "sine", 0.02);
+        tone(329.63, "triangle", 0.012);
+        tone(440, "sine", 0.008);
+        const t = c.currentTime;
+        master!.gain.setValueAtTime(0, t);
+        master!.gain.linearRampToValueAtTime(0.55, t + 2.2);
+      }
+      return c.state === "running";
     } catch {
-      /* blocked */
+      return false;
     }
-    const unlock = () => {
-      void unlockAndStart();
-      window.removeEventListener("pointerdown", unlock);
-      window.removeEventListener("keydown", unlock);
-    };
-    window.addEventListener("pointerdown", unlock, { once: true });
-    window.addEventListener("keydown", unlock, { once: true });
   }
 
-  function swell() {
+  function setIntensity(beat: BeatId) {
     if (stopped || !ctx || !master || ctx.state !== "running") return;
-    const osc = ctx.createOscillator();
-    const g = ctx.createGain();
-    osc.type = "sine";
-    osc.frequency.setValueAtTime(392, ctx.currentTime);
-    osc.frequency.linearRampToValueAtTime(523.25, ctx.currentTime + 1.2);
-    g.gain.value = 0;
-    osc.connect(g);
-    g.connect(master);
+    const levels: Record<BeatId, number> = {
+      dawn: 0.35,
+      spark: 0.48,
+      bloom: 0.58,
+      chorus: 0.72,
+      title: 0.85,
+    };
     const t = ctx.currentTime;
-    g.gain.linearRampToValueAtTime(0.07, t + 0.2);
-    g.gain.exponentialRampToValueAtTime(0.001, t + 2.2);
-    osc.start(t);
-    osc.stop(t + 2.3);
+    master.gain.cancelScheduledValues(t);
+    master.gain.linearRampToValueAtTime(levels[beat], t + 1.1);
+
+    if (beat === "chorus" || beat === "title") {
+      const osc = ctx.createOscillator();
+      const g = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(392, t);
+      osc.frequency.linearRampToValueAtTime(523.25, t + 1.4);
+      g.gain.value = 0;
+      osc.connect(g);
+      g.connect(master);
+      g.gain.linearRampToValueAtTime(0.06, t + 0.25);
+      g.gain.exponentialRampToValueAtTime(0.001, t + 2.4);
+      osc.start(t);
+      osc.stop(t + 2.5);
+    }
   }
 
   function stop() {
@@ -91,7 +104,7 @@ export function createOpeningSoundscape() {
       if (ctx.state === "closed") return;
       const t = ctx.currentTime;
       master.gain.cancelScheduledValues(t);
-      master.gain.linearRampToValueAtTime(0, t + 1.0);
+      master.gain.linearRampToValueAtTime(0, t + 0.9);
       window.setTimeout(() => {
         nodes.forEach((n) => {
           try {
@@ -101,11 +114,11 @@ export function createOpeningSoundscape() {
           }
         });
         if (ctx && ctx.state !== "closed") void ctx.close();
-      }, 1100);
+      }, 1000);
     } catch {
       /* ignore */
     }
   }
 
-  return { start, stop, swell };
+  return { unlock, setIntensity, stop };
 }

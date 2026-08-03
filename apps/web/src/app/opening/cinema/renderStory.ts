@@ -1,4 +1,4 @@
-import { lerp, smootherstep, windowT, easeOutBack, easeInOutCubic } from "./easing";
+import { clamp01, easeInOutCubic, easeOutBack, lerp, smootherstep, windowT } from "./easing";
 
 export type CinemaState = {
   time: number;
@@ -10,34 +10,22 @@ export type CinemaState = {
   dt: number;
 };
 
-type Particle = {
-  x: number;
-  y: number;
-  vx: number;
-  vy: number;
-  life: number;
-  max: number;
-  size: number;
-  hue: number;
-};
+type Petal = { a: number; r: number; s: number; spin: number; hue: number };
 
-function beatProgress(time: number) {
-  // Continuous story drivers (seconds)
-  const night = 1 - windowT(time, 4.5, 7);
-  const seed = windowT(time, 5.2, 8);
-  const dawn = windowT(time, 10, 14);
-  const grow = windowT(time, 11, 16.5);
-  const answer = windowT(time, 16.5, 21);
-  const mind = windowT(time, 22, 26);
-  const title = windowT(time, 26.5, 29.5);
-  return { night, seed, dawn, grow, answer, mind, title };
-}
-
+/**
+ * Aurora Meadow theme — warm dawn, luminous petals, title-forward.
+ * Completely replaces the dark soil-cutaway look.
+ */
 export function createCinemaRenderer(canvas: HTMLCanvasElement) {
   const ctx = canvas.getContext("2d", { alpha: false })!;
-  const dust: Particle[] = [];
-  const fireflies: Particle[] = [];
-  const pollen: Particle[] = [];
+  const orbs: { x: number; y: number; r: number; vx: number; vy: number; a: number }[] = [];
+  const petals: Petal[] = Array.from({ length: 18 }, (_, i) => ({
+    a: (i / 18) * Math.PI * 2,
+    r: 40 + (i % 5) * 18,
+    s: 0.6 + (i % 4) * 0.15,
+    spin: (i % 2 === 0 ? 1 : -1) * (0.4 + (i % 3) * 0.2),
+    hue: 95 + (i % 6) * 8,
+  }));
 
   function resize(w: number, h: number, dpr: number) {
     canvas.width = Math.floor(w * dpr);
@@ -47,408 +35,234 @@ export function createCinemaRenderer(canvas: HTMLCanvasElement) {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   }
 
-  function spawnDust(cx: number, cy: number, n: number, time: number) {
-    for (let i = 0; i < n; i++) {
-      const a = Math.random() * Math.PI * 2;
-      const sp = 20 + Math.random() * 80;
-      dust.push({
-        x: cx + Math.cos(a) * 10,
-        y: cy + Math.sin(a) * 10,
-        vx: Math.cos(a) * sp,
-        vy: Math.sin(a) * sp - 20,
-        life: 0,
-        max: 1.2 + Math.random() * 1.4,
-        size: 1.2 + Math.random() * 2.2,
-        hue: 70 + Math.random() * 40,
-      });
-    }
-    void time;
-  }
-
-  function ensureAmbient(w: number, h: number, answer: number, mind: number) {
-    while (fireflies.length < Math.floor(14 * Math.max(answer, mind))) {
-      fireflies.push({
-        x: Math.random() * w,
-        y: h * 0.25 + Math.random() * h * 0.35,
-        vx: (Math.random() - 0.5) * 12,
-        vy: (Math.random() - 0.5) * 8,
-        life: Math.random(),
-        max: 1,
-        size: 1.5 + Math.random() * 2,
-        hue: 70,
-      });
-    }
-    while (pollen.length < Math.floor(40 * (0.2 + answer))) {
-      pollen.push({
-        x: Math.random() * w,
-        y: Math.random() * h * 0.7,
-        vx: 4 + Math.random() * 10,
-        vy: (Math.random() - 0.5) * 6,
-        life: Math.random(),
-        max: 1,
-        size: 0.8 + Math.random() * 1.4,
-        hue: 55,
-      });
-    }
-  }
-
   function draw(state: CinemaState) {
     const { time, duration, warm, w, h, dt } = state;
-    const t = warm ? lerp(26.5, duration, Math.min(1, time / Math.max(0.001, duration))) : time;
-    const p = warm
-      ? { night: 0, seed: 1, dawn: 1, grow: 1, answer: 1, mind: 1, title: smootherstep(time / duration) }
-      : beatProgress(t);
+    const t = warm ? duration * 0.92 + time * 0.02 : time;
 
-    // Camera — slow push-in + gentle breathe (staging)
-    const camZoom = lerp(1, 1.18, easeInOutCubic(t / duration));
-    const camX = Math.sin(t * 0.15) * 8;
-    const camY = Math.cos(t * 0.11) * 5 - p.dawn * 10;
+    const dawn = warm ? 1 : windowT(t, 0, 5);
+    const spark = warm ? 1 : windowT(t, 5.5, 10);
+    const bloom = warm ? 1 : windowT(t, 11, 17);
+    const chorus = warm ? 1 : windowT(t, 17.5, 23);
+    const finale = warm ? smootherstep(time / Math.max(0.001, duration)) : windowT(t, 23.5, 28);
+
+    // Camera: gentle float, stronger push on finale
+    const zoom = lerp(1.02, 1.2, easeInOutCubic(finale));
+    const cx = Math.sin(t * 0.12) * 10;
+    const cy = Math.cos(t * 0.09) * 6;
 
     ctx.save();
-    ctx.clearRect(0, 0, w, h);
-    ctx.translate(w / 2 + camX, h / 2 + camY);
-    ctx.scale(camZoom, camZoom);
+    ctx.fillStyle = "#2a1840";
+    ctx.fillRect(0, 0, w, h);
+
+    ctx.translate(w / 2 + cx, h / 2 + cy);
+    ctx.scale(zoom, zoom);
     ctx.translate(-w / 2, -h / 2);
 
-    drawSky(ctx, w, h, p, t);
-    drawHills(ctx, w, h, p, t);
-    drawFieldGrass(ctx, w, h, p, t);
-    drawSoilCutaway(ctx, w, h);
-    drawRoots(ctx, w, h, p, t);
-    drawPlant(ctx, w, h, p, t);
-    drawButterflies(ctx, w, h, p, t);
-
-    ensureAmbient(w, h, p.answer, p.mind);
-    updateAndDrawParticles(ctx, fireflies, w, h, dt, "firefly");
-    updateAndDrawParticles(ctx, pollen, w, h, dt, "pollen");
-
-    if (p.title > 0.05 && dust.length < 120) {
-      spawnDust(w * 0.5, h * 0.42, 8, t);
-    }
-    updateAndDrawParticles(ctx, dust, w, h, dt, "dust");
+    drawAuroraSky(ctx, w, h, dawn, spark, bloom, t);
+    drawMeadow(ctx, w, h, dawn, bloom, t);
+    drawLightSpark(ctx, w, h, spark, bloom, t);
+    drawBloomPlant(ctx, w, h, bloom, chorus, t);
+    drawPetalRing(ctx, w, h, chorus, finale, t, petals);
+    ensureOrbs(orbs, w, h, chorus);
+    drawOrbs(ctx, orbs, dt, chorus);
 
     ctx.restore();
 
-    // Film grade + vignette (screen space)
-    drawGrade(ctx, w, h, p);
-    if (p.title > 0) drawTitle(ctx, w, h, p.title, t);
+    drawVignette(ctx, w, h, finale);
   }
 
   return { resize, draw };
 }
 
-function drawSky(
+function drawAuroraSky(
   ctx: CanvasRenderingContext2D,
   w: number,
   h: number,
-  p: ReturnType<typeof beatProgress>,
+  dawn: number,
+  spark: number,
+  bloom: number,
   t: number,
 ) {
+  // Warm lavender → peach dawn (bright meadow, not forest dark)
   const g = ctx.createLinearGradient(0, 0, 0, h);
-  // Night → dawn → day color blend
-  const r1 = lerp(10, 110, p.dawn);
-  const g1 = lerp(18, 160, p.dawn);
-  const b1 = lerp(28, 200, p.dawn);
-  const r2 = lerp(5, 200, p.dawn);
-  const g2 = lerp(12, 220, p.dawn);
-  const b2 = lerp(14, 180, p.dawn);
-  g.addColorStop(0, `rgb(${r1 * (1 - p.mind * 0.1)},${g1},${b1})`);
-  g.addColorStop(0.55, `rgb(${lerp(8, 180, p.dawn)},${lerp(20, 210, p.dawn)},${lerp(30, 200, p.dawn)})`);
-  g.addColorStop(1, `rgb(${r2},${Math.max(g2, 190 * p.dawn + 20)},${Math.max(40, b2 - 40)})`);
+  const topR = lerp(90, 255, dawn);
+  const topG = lerp(70, 214, dawn);
+  const topB = lerp(140, 196, dawn);
+  g.addColorStop(0, `rgb(${topR},${topG},${topB})`);
+  g.addColorStop(0.4, `rgb(${lerp(120, 255, dawn)},${lerp(140, 220, dawn)},${lerp(200, 210, dawn)})`);
+  g.addColorStop(0.7, `rgb(${lerp(160, 255, dawn)},${lerp(180, 236, dawn)},${lerp(180, 200, dawn)})`);
+  g.addColorStop(1, `rgb(${lerp(180, 255, dawn)},${lerp(210, 245, dawn)},${lerp(170, 210, dawn)})`);
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, w, h);
 
-  // Stars
-  if (p.night > 0.05) {
-    ctx.globalAlpha = p.night * 0.9;
-    for (let i = 0; i < 60; i++) {
-      const x = ((i * 97) % w) + Math.sin(t * 0.3 + i) * 2;
-      const y = ((i * 53) % (h * 0.5)) + 10;
-      const tw = 0.4 + 0.6 * Math.abs(Math.sin(t * 2 + i));
-      ctx.fillStyle = `rgba(255,255,255,${tw})`;
-      ctx.beginPath();
-      ctx.arc(x, y, 0.8 + (i % 3) * 0.4, 0, Math.PI * 2);
-      ctx.fill();
+  // Aurora ribbons
+  ctx.save();
+  ctx.globalAlpha = 0.22 + 0.15 * spark;
+  for (let i = 0; i < 3; i++) {
+    const yg = ctx.createLinearGradient(0, h * 0.1, w, h * 0.35 + i * 40);
+    yg.addColorStop(0, "rgba(120,255,200,0)");
+    yg.addColorStop(0.5, i === 1 ? "rgba(180,140,255,0.5)" : "rgba(100,230,180,0.45)");
+    yg.addColorStop(1, "rgba(255,200,140,0)");
+    ctx.fillStyle = yg;
+    ctx.beginPath();
+    ctx.moveTo(0, h * 0.2 + i * 30);
+    for (let x = 0; x <= w; x += 20) {
+      ctx.lineTo(x, h * 0.18 + i * 28 + Math.sin(x * 0.01 + t * 0.4 + i) * 18);
     }
-    ctx.globalAlpha = 1;
-  }
-
-  // Sun
-  if (p.dawn > 0) {
-    const sx = w * 0.72;
-    const sy = lerp(h * 0.72, h * 0.2, easeInOutCubic(p.dawn));
-    const rad = lerp(20, 55, p.dawn);
-    const glow = ctx.createRadialGradient(sx, sy, 0, sx, sy, rad * 3.2);
-    glow.addColorStop(0, `rgba(255,230,160,${0.55 * p.dawn})`);
-    glow.addColorStop(0.4, `rgba(255,200,120,${0.2 * p.dawn})`);
-    glow.addColorStop(1, "rgba(255,200,120,0)");
-    ctx.fillStyle = glow;
-    ctx.beginPath();
-    ctx.arc(sx, sy, rad * 3.2, 0, Math.PI * 2);
-    ctx.fill();
-    const core = ctx.createRadialGradient(sx - rad * 0.2, sy - rad * 0.2, 0, sx, sy, rad);
-    core.addColorStop(0, "#fff8dc");
-    core.addColorStop(0.55, "#f2d28b");
-    core.addColorStop(1, "#e0a85a");
-    ctx.fillStyle = core;
-    ctx.beginPath();
-    ctx.arc(sx, sy, rad, 0, Math.PI * 2);
+    ctx.lineTo(w, h * 0.45);
+    ctx.lineTo(0, h * 0.45);
     ctx.fill();
   }
+  ctx.restore();
 
-  // Soft volumetric godrays at dawn
-  if (p.dawn > 0.3) {
-    ctx.save();
-    ctx.globalAlpha = 0.08 * p.dawn;
-    ctx.fillStyle = "#fff3c8";
-    for (let i = 0; i < 5; i++) {
-      ctx.beginPath();
-      const x = w * 0.55 + i * 40;
-      ctx.moveTo(w * 0.72, h * 0.22);
-      ctx.lineTo(x - 30, h);
-      ctx.lineTo(x + 30, h);
-      ctx.closePath();
-      ctx.fill();
-    }
-    ctx.restore();
-  }
+  // Soft sun disc
+  const sunX = w * 0.78;
+  const sunY = lerp(h * 0.75, h * 0.22, easeInOutCubic(dawn));
+  const sunR = lerp(30, 70, dawn);
+  const glow = ctx.createRadialGradient(sunX, sunY, 0, sunX, sunY, sunR * 3.5);
+  glow.addColorStop(0, `rgba(255,240,200,${0.65 * dawn})`);
+  glow.addColorStop(0.35, `rgba(255,180,120,${0.25 * dawn})`);
+  glow.addColorStop(1, "rgba(255,160,100,0)");
+  ctx.fillStyle = glow;
+  ctx.beginPath();
+  ctx.arc(sunX, sunY, sunR * 3.5, 0, Math.PI * 2);
+  ctx.fill();
+  const core = ctx.createRadialGradient(sunX - 10, sunY - 10, 0, sunX, sunY, sunR);
+  core.addColorStop(0, "#fff8e8");
+  core.addColorStop(0.6, "#ffd089");
+  core.addColorStop(1, "#ff9a5c");
+  ctx.fillStyle = core;
+  ctx.beginPath();
+  ctx.arc(sunX, sunY, sunR, 0, Math.PI * 2);
+  ctx.fill();
+
+  void bloom;
 }
 
-function drawHills(
+function drawMeadow(
   ctx: CanvasRenderingContext2D,
   w: number,
   h: number,
-  p: ReturnType<typeof beatProgress>,
+  dawn: number,
+  bloom: number,
   t: number,
 ) {
-  // Far ridge
-  ctx.beginPath();
-  ctx.moveTo(0, h * 0.58);
-  for (let x = 0; x <= w; x += 18) {
-    const y = h * 0.56 + Math.sin(x * 0.008 + 0.6) * 22 + Math.sin(x * 0.02 + t * 0.08) * 2;
-    ctx.lineTo(x, y);
-  }
-  ctx.lineTo(w, h * 0.72);
-  ctx.lineTo(0, h * 0.72);
-  ctx.closePath();
-  const far = ctx.createLinearGradient(0, h * 0.5, 0, h * 0.72);
-  if (p.dawn > 0.35) {
-    far.addColorStop(0, "#5a9a6e");
-    far.addColorStop(1, "#2f5c40");
-  } else {
-    far.addColorStop(0, "#1a3a2a");
-    far.addColorStop(1, "#0c1c14");
-  }
-  ctx.fillStyle = far;
-  ctx.fill();
-
-  // Mid hills
-  ctx.beginPath();
-  ctx.moveTo(0, h * 0.64);
-  for (let x = 0; x <= w; x += 14) {
-    const y = h * 0.63 + Math.sin(x * 0.012 + 2) * 16 + Math.sin(x * 0.04 + t * 0.5) * 1.2;
-    ctx.lineTo(x, y);
-  }
-  ctx.lineTo(w, h * 0.74);
-  ctx.lineTo(0, h * 0.74);
-  ctx.closePath();
-  const mid = ctx.createLinearGradient(0, h * 0.58, 0, h * 0.74);
-  if (p.dawn > 0.35) {
-    mid.addColorStop(0, "#4f9464");
-    mid.addColorStop(1, "#244a32");
-  } else {
-    mid.addColorStop(0, "#143024");
-    mid.addColorStop(1, "#0a1810");
-  }
-  ctx.fillStyle = mid;
-  ctx.fill();
-}
-
-function drawFieldGrass(
-  ctx: CanvasRenderingContext2D,
-  w: number,
-  h: number,
-  p: ReturnType<typeof beatProgress>,
-  t: number,
-) {
-  const base = h * 0.68;
+  // Soft rolling meadow — no brown cutaway slab
+  const base = h * 0.72;
   ctx.beginPath();
   ctx.moveTo(0, base);
-  for (let x = 0; x <= w; x += 10) {
-    const y = base + Math.sin(x * 0.03 + t * 1.1) * 2.5;
-    ctx.lineTo(x, y);
-  }
-  ctx.lineTo(w, h * 0.78);
-  ctx.lineTo(0, h * 0.78);
-  ctx.closePath();
-  ctx.fillStyle = p.dawn > 0.4 ? "#3d6b48" : "#102418";
-  ctx.fill();
-
-  // Soft mist above field
-  const mist = ctx.createLinearGradient(0, h * 0.55, 0, h * 0.72);
-  mist.addColorStop(0, "rgba(180,210,230,0)");
-  mist.addColorStop(1, `rgba(180,210,230,${0.08 + 0.1 * p.dawn})`);
-  ctx.fillStyle = mist;
-  ctx.fillRect(0, h * 0.55, w, h * 0.2);
-}
-
-function drawSoilCutaway(ctx: CanvasRenderingContext2D, w: number, h: number) {
-  const top = h * 0.7;
-  const g = ctx.createLinearGradient(0, top, 0, h);
-  g.addColorStop(0, "#7a5640");
-  g.addColorStop(0.2, "#5a3c2a");
-  g.addColorStop(0.55, "#2e1c12");
-  g.addColorStop(1, "#0e0806");
-  ctx.fillStyle = g;
-  ctx.beginPath();
-  ctx.moveTo(0, top);
-  for (let x = 0; x <= w; x += 10) {
-    ctx.lineTo(x, top + Math.sin(x * 0.05) * 2.5);
+  for (let x = 0; x <= w; x += 12) {
+    ctx.lineTo(x, base + Math.sin(x * 0.02 + t * 0.5) * 6 + Math.sin(x * 0.005) * 14);
   }
   ctx.lineTo(w, h);
   ctx.lineTo(0, h);
   ctx.closePath();
+  const g = ctx.createLinearGradient(0, base - 40, 0, h);
+  g.addColorStop(0, dawn > 0.35 ? "#9adf7a" : "#5a9a72");
+  g.addColorStop(0.45, dawn > 0.35 ? "#5fbf78" : "#3d7a5c");
+  g.addColorStop(1, "#2a5a48");
+  ctx.fillStyle = g;
   ctx.fill();
 
-  // Cutaway highlight edge
-  ctx.strokeStyle = "rgba(255,220,180,0.12)";
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.moveTo(0, top);
-  for (let x = 0; x <= w; x += 10) {
-    ctx.lineTo(x, top + Math.sin(x * 0.05) * 2.5);
-  }
-  ctx.stroke();
-}
-
-function drawRoots(
-  ctx: CanvasRenderingContext2D,
-  w: number,
-  h: number,
-  p: ReturnType<typeof beatProgress>,
-  t: number,
-) {
-  const reveal = Math.max(p.grow * 0.3, p.answer, p.mind);
-  if (reveal <= 0.01) return;
-  const cx = w * 0.5;
-  const cy = h * 0.72;
-  ctx.save();
-  ctx.lineCap = "round";
-  ctx.lineWidth = 2;
-  const glow = p.mind > 0;
-  ctx.strokeStyle = glow ? `rgba(125,206,160,${0.35 + 0.35 * Math.sin(t * 2)})` : "rgba(90,60,40,0.7)";
-  if (glow) {
-    ctx.shadowColor = "rgba(125,206,160,0.6)";
-    ctx.shadowBlur = 8;
-  }
-  const roots = [
-    [0, 0, -30, 40, -55, 90],
-    [0, 0, 28, 38, 58, 95],
-    [0, 0, -5, 50, 0, 110],
-    [0, 0, -45, 55, -80, 85],
-    [0, 0, 48, 52, 90, 88],
-  ];
-  for (const r of roots) {
+  // Blades
+  ctx.strokeStyle = `rgba(200,255,180,${0.15 + 0.2 * bloom})`;
+  ctx.lineWidth = 1.2;
+  for (let i = 0; i < 40; i++) {
+    const x = ((i * 47) % w) + 10;
+    const sway = Math.sin(t * 2 + i) * 4;
     ctx.beginPath();
-    ctx.moveTo(cx + r[0]!, cy + r[1]!);
-    const len = reveal;
-    ctx.quadraticCurveTo(
-      cx + r[2]! * len,
-      cy + r[3]! * len,
-      cx + r[4]! * len,
-      cy + r[5]! * len,
-    );
+    ctx.moveTo(x, h * 0.78);
+    ctx.quadraticCurveTo(x + sway, h * 0.74, x + sway * 1.4, h * 0.7);
     ctx.stroke();
   }
-  ctx.restore();
 }
 
-function drawPlant(
+function drawLightSpark(
   ctx: CanvasRenderingContext2D,
   w: number,
   h: number,
-  p: ReturnType<typeof beatProgress>,
+  spark: number,
+  bloom: number,
   t: number,
 ) {
-  const cx = w * 0.5;
-  const soilY = h * 0.7;
+  if (spark <= 0.01 || bloom > 0.85) return;
+  const x = w * 0.5;
+  const y = lerp(h * 0.55, h * 0.62, spark);
+  const r = 10 + spark * 16 + Math.sin(t * 3) * 2;
+  const g = ctx.createRadialGradient(x, y, 0, x, y, r * 4);
+  g.addColorStop(0, `rgba(255,255,230,${0.9 * spark})`);
+  g.addColorStop(0.3, `rgba(180,255,160,${0.45 * spark})`);
+  g.addColorStop(1, "rgba(120,200,255,0)");
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.arc(x, y, r * 4, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = "#fffef5";
+  ctx.beginPath();
+  ctx.arc(x, y, r * 0.35, 0, Math.PI * 2);
+  ctx.fill();
+}
 
-  // Seed — squash/stretch breathe (Pixar appeal)
-  if (p.seed > 0 && p.grow < 0.85) {
-    const appear = easeOutBack(p.seed);
-    const breath = 1 + Math.sin(t * 2.2) * 0.06;
-    const squashY = breath;
-    const squashX = 1 / breath;
+function drawBloomPlant(
+  ctx: CanvasRenderingContext2D,
+  w: number,
+  h: number,
+  bloom: number,
+  chorus: number,
+  t: number,
+) {
+  if (bloom <= 0.01) return;
+  const g = easeOutBack(clamp01(bloom));
+  const cx = w * 0.5;
+  const cy = h * 0.7;
+  const stem = 110 * g;
+  const sway = Math.sin(t * 1.3) * 0.05;
+
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.rotate(sway);
+
+  // Stem
+  ctx.strokeStyle = "#2d8f4e";
+  ctx.lineWidth = 4;
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  ctx.moveTo(0, 0);
+  ctx.bezierCurveTo(-6, -stem * 0.4, 6, -stem * 0.7, 0, -stem);
+  ctx.stroke();
+
+  const leafT = smootherstep((bloom - 0.2) / 0.8);
+  if (leafT > 0) {
+    leaf(ctx, -14, -stem * 0.4, -1, leafT, t, 0);
+    leaf(ctx, 14, -stem * 0.5, 1, leafT, t, 1);
+    leaf(ctx, -10, -stem * 0.68, -0.8, leafT * 0.9, t, 2);
+    leaf(ctx, 12, -stem * 0.78, 0.85, leafT * 0.85, t, 3);
+  }
+
+  // Flower crown on chorus
+  if (chorus > 0.1) {
+    const ft = easeOutBack(chorus);
     ctx.save();
-    ctx.translate(cx, soilY + 8);
-    ctx.scale(appear * squashX, appear * squashY);
-    ctx.globalAlpha = 1 - p.grow * 0.9;
-    const sg = ctx.createRadialGradient(-3, -2, 0, 0, 0, 14);
-    sg.addColorStop(0, "#e8d2a8");
-    sg.addColorStop(1, "#a07848");
-    ctx.fillStyle = sg;
+    ctx.translate(0, -stem - 4);
+    ctx.scale(ft, ft);
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2 + t * 0.2;
+      ctx.fillStyle = i % 2 ? "#ffe4a0" : "#ffb7d5";
+      ctx.beginPath();
+      ctx.ellipse(Math.cos(a) * 14, Math.sin(a) * 14, 10, 6, a, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.fillStyle = "#fff3a0";
     ctx.beginPath();
-    ctx.ellipse(0, 0, 14, 9, 0, 0, Math.PI * 2);
+    ctx.arc(0, 0, 7, 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
   }
 
-  // Sprout growth with anticipation then ease-out-back
-  if (p.grow > 0) {
-    const g = easeOutBack(Math.min(1, p.grow * 1.05));
-    const sway = Math.sin(t * 1.4) * 0.04 * p.grow;
-    const stemH = 90 * g;
-    ctx.save();
-    ctx.translate(cx, soilY);
-    ctx.rotate(sway);
-
-    // Stem
-    ctx.strokeStyle = "#2f7a4a";
-    ctx.lineWidth = 3.5;
-    ctx.lineCap = "round";
-    ctx.beginPath();
-    ctx.moveTo(0, 0);
-    ctx.bezierCurveTo(-2, -stemH * 0.35, 2, -stemH * 0.65, 0, -stemH);
-    ctx.stroke();
-
-    // Leaves — overlapping action (different phase)
-    const leafProg = smootherstep((p.grow - 0.25) / 0.75);
-    if (leafProg > 0) {
-      drawLeaf(ctx, -8, -stemH * 0.45, -0.9, leafProg, t, 0);
-      drawLeaf(ctx, 8, -stemH * 0.55, 0.9, leafProg * 0.95, t, 1);
-      drawLeaf(ctx, -6, -stemH * 0.72, -0.7, leafProg * 0.85, t, 2);
-      drawLeaf(ctx, 7, -stemH * 0.82, 0.75, leafProg * 0.8, t, 3);
-    }
-
-    // Intelligence wisps
-    if (p.mind > 0) {
-      ctx.globalAlpha = 0.5 + 0.4 * Math.sin(t * 3);
-      ctx.strokeStyle = "rgba(180,255,200,0.8)";
-      ctx.fillStyle = "rgba(200,255,210,0.9)";
-      ctx.lineWidth = 1;
-      const pts = [
-        [-18, -stemH * 0.7],
-        [0, -stemH * 0.95],
-        [18, -stemH * 0.65],
-      ];
-      ctx.beginPath();
-      ctx.moveTo(pts[0]![0]!, pts[0]![1]!);
-      ctx.lineTo(pts[1]![0]!, pts[1]![1]!);
-      ctx.lineTo(pts[2]![0]!, pts[2]![1]!);
-      ctx.stroke();
-      for (const pt of pts) {
-        ctx.beginPath();
-        ctx.arc(pt[0]!, pt[1]!, 2.2, 0, Math.PI * 2);
-        ctx.fill();
-      }
-      ctx.globalAlpha = 1;
-    }
-
-    ctx.restore();
-  }
+  ctx.restore();
 }
 
-function drawLeaf(
+function leaf(
   ctx: CanvasRenderingContext2D,
   x: number,
   y: number,
@@ -457,182 +271,100 @@ function drawLeaf(
   t: number,
   phase: number,
 ) {
-  const flutter = Math.sin(t * 2.5 + phase * 1.3) * 0.12;
-  const scale = easeOutBack(prog);
+  const flutter = Math.sin(t * 2.6 + phase) * 0.14;
+  const s = easeOutBack(prog);
   ctx.save();
   ctx.translate(x, y);
-  ctx.rotate(dir * 0.7 + flutter);
-  ctx.scale(scale * Math.sign(dir || 1) * Math.abs(dir) * 1.1, scale);
-  const lg = ctx.createLinearGradient(0, 0, 28, -10);
-  lg.addColorStop(0, "#c8f5a8");
-  lg.addColorStop(1, "#2f8a4a");
+  ctx.rotate(dir * 0.75 + flutter);
+  ctx.scale(s * dir, s);
+  const lg = ctx.createLinearGradient(0, 0, 36, -8);
+  lg.addColorStop(0, "#d8ffb0");
+  lg.addColorStop(1, "#2f9a55");
   ctx.fillStyle = lg;
   ctx.beginPath();
   ctx.moveTo(0, 0);
-  ctx.quadraticCurveTo(16, -14, 32, -6);
-  ctx.quadraticCurveTo(16, 2, 0, 0);
+  ctx.quadraticCurveTo(18, -16, 38, -4);
+  ctx.quadraticCurveTo(18, 4, 0, 0);
   ctx.fill();
-  // Vein
-  ctx.strokeStyle = "rgba(255,255,255,0.25)";
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(2, -1);
-  ctx.quadraticCurveTo(14, -8, 28, -6);
-  ctx.stroke();
   ctx.restore();
 }
 
-function drawButterflies(
+function drawPetalRing(
   ctx: CanvasRenderingContext2D,
   w: number,
   h: number,
-  p: ReturnType<typeof beatProgress>,
+  chorus: number,
+  finale: number,
   t: number,
+  petals: Petal[],
 ) {
-  if (p.answer <= 0.05) return;
-  ctx.globalAlpha = Math.min(1, p.answer * 1.4);
-  const paths = [
-    { ox: 0.2, oy: 0.35, speed: 0.7, color: "#f0d5a8" },
-    { ox: 0.75, oy: 0.38, speed: 0.55, color: "#d8ecb8" },
-  ];
-  for (const b of paths) {
-    // Arc motion (Disney principle: arcs)
-    const x = w * b.ox + Math.sin(t * b.speed) * 70 + Math.sin(t * b.speed * 0.5) * 20;
-    const y = h * b.oy + Math.cos(t * b.speed * 0.9) * 28;
-    const flap = Math.sin(t * 14) * 0.45;
-    ctx.save();
-    ctx.translate(x, y);
-    ctx.fillStyle = b.color;
+  const show = Math.max(chorus, finale);
+  if (show < 0.05) return;
+  const cx = w * 0.5;
+  const cy = h * 0.42;
+  ctx.save();
+  ctx.globalAlpha = 0.35 + 0.5 * show;
+  for (const p of petals) {
+    const ang = p.a + t * p.spin * 0.25;
+    const rr = p.r * (0.8 + 0.6 * show) * (1 + finale * 1.8);
+    const x = cx + Math.cos(ang) * rr * (w / 400);
+    const y = cy + Math.sin(ang) * rr * 0.7 * (h / 400);
+    ctx.fillStyle = `hsla(${p.hue},70%,75%,0.85)`;
     ctx.beginPath();
-    ctx.ellipse(-6, 0, 7, 4 + flap * 2, -0.5, 0, Math.PI * 2);
-    ctx.ellipse(6, 0, 7, 4 + flap * 2, 0.5, 0, Math.PI * 2);
+    ctx.ellipse(x, y, 7 * p.s, 4 * p.s, ang, 0, Math.PI * 2);
     ctx.fill();
-    ctx.fillStyle = "#5a4030";
-    ctx.beginPath();
-    ctx.arc(0, 0, 1.5, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
   }
+  ctx.restore();
+}
+
+function ensureOrbs(
+  orbs: { x: number; y: number; r: number; vx: number; vy: number; a: number }[],
+  w: number,
+  h: number,
+  chorus: number,
+) {
+  const target = Math.floor(24 * chorus);
+  while (orbs.length < target) {
+    orbs.push({
+      x: Math.random() * w,
+      y: Math.random() * h * 0.7,
+      r: 1.5 + Math.random() * 3,
+      vx: (Math.random() - 0.5) * 20,
+      vy: (Math.random() - 0.5) * 14,
+      a: Math.random(),
+    });
+  }
+}
+
+function drawOrbs(
+  ctx: CanvasRenderingContext2D,
+  orbs: { x: number; y: number; r: number; vx: number; vy: number; a: number }[],
+  dt: number,
+  chorus: number,
+) {
+  if (chorus < 0.05) return;
+  for (const o of orbs) {
+    o.x += o.vx * dt;
+    o.y += o.vy * dt;
+    o.a += dt;
+    ctx.globalAlpha = 0.35 + 0.5 * Math.abs(Math.sin(o.a * 2));
+    ctx.fillStyle = "#fff6c8";
+    ctx.shadowColor = "#ffe08a";
+    ctx.shadowBlur = 12;
+    ctx.beginPath();
+    ctx.arc(o.x, o.y, o.r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.shadowBlur = 0;
   ctx.globalAlpha = 1;
 }
 
-function updateAndDrawParticles(
-  ctx: CanvasRenderingContext2D,
-  list: Particle[],
-  w: number,
-  h: number,
-  dt: number,
-  kind: "dust" | "firefly" | "pollen",
-) {
-  for (let i = list.length - 1; i >= 0; i--) {
-    const p = list[i]!;
-    p.life += dt;
-    p.x += p.vx * dt;
-    p.y += p.vy * dt;
-    if (kind === "dust") {
-      p.vy += 30 * dt;
-      if (p.life > p.max) {
-        list.splice(i, 1);
-        continue;
-      }
-    } else {
-      if (p.x < 0) p.x = w;
-      if (p.x > w) p.x = 0;
-      if (p.y < 0) p.y = h * 0.6;
-      if (p.y > h * 0.7) p.y = h * 0.25;
-    }
-    const alpha =
-      kind === "dust"
-        ? 1 - p.life / p.max
-        : 0.35 + 0.65 * Math.abs(Math.sin(p.life * 3 + p.x));
-    ctx.globalAlpha = alpha;
-    if (kind === "firefly") {
-      ctx.fillStyle = "#e8f6b5";
-      ctx.shadowColor = "#e8f6b5";
-      ctx.shadowBlur = 10;
-    } else if (kind === "dust") {
-      ctx.fillStyle = `hsl(${p.hue},70%,80%)`;
-      ctx.shadowColor = "rgba(255,255,200,0.8)";
-      ctx.shadowBlur = 6;
-    } else {
-      ctx.fillStyle = "rgba(255,255,230,0.8)";
-      ctx.shadowBlur = 0;
-    }
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.shadowBlur = 0;
-    ctx.globalAlpha = 1;
-  }
-}
-
-function drawGrade(
-  ctx: CanvasRenderingContext2D,
-  w: number,
-  h: number,
-  p: ReturnType<typeof beatProgress>,
-) {
-  // Vignette
-  const v = ctx.createRadialGradient(w / 2, h / 2, h * 0.2, w / 2, h / 2, h * 0.78);
-  v.addColorStop(0, "rgba(0,0,0,0)");
-  v.addColorStop(1, "rgba(0,0,0,0.55)");
+function drawVignette(ctx: CanvasRenderingContext2D, w: number, h: number, finale: number) {
+  // Soft warm vignette — keeps title readable without darkening the crest
+  const v = ctx.createRadialGradient(w / 2, h / 2, h * 0.2, w / 2, h / 2, h * 0.95);
+  v.addColorStop(0, "rgba(255,247,241,0)");
+  v.addColorStop(0.55, "rgba(255,247,241,0)");
+  v.addColorStop(1, `rgba(60,30,80,${0.18 + 0.12 * finale})`);
   ctx.fillStyle = v;
   ctx.fillRect(0, 0, w, h);
-
-  // Warm grade at dawn
-  if (p.dawn > 0) {
-    ctx.globalAlpha = 0.12 * p.dawn;
-    ctx.fillStyle = "#ffd9a0";
-    ctx.fillRect(0, 0, w, h);
-    ctx.globalAlpha = 1;
-  }
-
-  // Soft film grain
-  ctx.globalAlpha = 0.04;
-  for (let i = 0; i < 120; i++) {
-    ctx.fillStyle = Math.random() > 0.5 ? "#fff" : "#000";
-    ctx.fillRect(Math.random() * w, Math.random() * h, 1.2, 1.2);
-  }
-  ctx.globalAlpha = 1;
-}
-
-function drawTitle(
-  ctx: CanvasRenderingContext2D,
-  w: number,
-  h: number,
-  title: number,
-  t: number,
-) {
-  const a = smootherstep(title);
-  ctx.save();
-  ctx.globalAlpha = a;
-  // Dark theatrical hold
-  ctx.fillStyle = `rgba(5,12,9,${0.55 * a})`;
-  ctx.fillRect(0, 0, w, h);
-
-  // Crest ring
-  const cx = w / 2;
-  const cy = h * 0.44;
-  const rad = Math.min(w, h) * 0.18 * (0.92 + 0.08 * Math.sin(t * 1.5));
-  ctx.strokeStyle = "rgba(255,255,255,0.28)";
-  ctx.lineWidth = 1.5;
-  ctx.beginPath();
-  ctx.arc(cx, cy, rad, 0, Math.PI * 2);
-  ctx.stroke();
-  ctx.strokeStyle = "rgba(111,191,122,0.25)";
-  ctx.beginPath();
-  ctx.arc(cx, cy, rad * 1.08, 0, Math.PI * 2);
-  ctx.stroke();
-
-  ctx.textAlign = "center";
-  ctx.fillStyle = "#f7fbf6";
-  ctx.font = `500 ${Math.max(28, Math.min(56, w * 0.08))}px Outfit, system-ui, sans-serif`;
-  ctx.shadowColor = "rgba(0,0,0,0.45)";
-  ctx.shadowBlur = 20;
-  ctx.fillText("MOMO.AI", cx, cy + 10);
-  ctx.shadowBlur = 0;
-  ctx.font = `400 ${Math.max(12, Math.min(18, w * 0.028))}px Outfit, system-ui, sans-serif`;
-  ctx.fillStyle = "rgba(244,247,242,0.85)";
-  ctx.fillText("Growing Intelligence. Growing Tomorrow.", cx, cy + 48);
-  ctx.restore();
 }

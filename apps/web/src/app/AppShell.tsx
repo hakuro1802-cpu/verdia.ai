@@ -13,7 +13,6 @@ export function AppShell() {
 
   const finishOpening = useCallback(() => {
     setEntering(true);
-    // Brief overlap so splash morphs into home without a blank frame
     window.setTimeout(() => {
       setScreen("home");
       setEntering(false);
@@ -21,7 +20,9 @@ export function AppShell() {
   }, []);
 
   return (
-    <div className={`app-root ${entering ? "is-morphing" : ""}`}>
+    <div
+      className={`app-shell ${screen === "opening" ? "is-opening" : "is-home"} ${entering ? "is-morphing" : ""}`}
+    >
       {screen === "opening" ? <OpeningScreen onFinished={finishOpening} /> : <HomeScreen />}
     </div>
   );

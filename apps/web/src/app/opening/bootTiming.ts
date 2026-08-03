@@ -1,66 +1,57 @@
-const STORAGE_KEY = "momo.ai.hasLaunched";
+export type BootMode = "cold" | "warm";
 
-export type StoryBeatId =
-  | "night"
-  | "seed"
-  | "morning"
-  | "answer"
-  | "intelligence"
-  | "title";
+export type BeatId = "dawn" | "spark" | "bloom" | "chorus" | "title";
 
-export type StoryBeat = {
-  id: StoryBeatId;
-  /** When this beat begins (ms from start) */
-  startMs: number;
-  caption: string;
+export type Beat = {
+  id: BeatId;
+  atMs: number;
 };
 
-export type BootProfile = {
-  mode: "cold" | "warm";
-  durationMs: number;
-  beats: StoryBeat[];
+export type BootPlan = {
+  mode: BootMode;
+  totalMs: number;
+  beats: Beat[];
 };
 
-/** Cold launch — full 30s illustrated story. */
-const COLD: BootProfile = {
+export const coldBootPlan: BootPlan = {
   mode: "cold",
-  durationMs: 30_000,
+  totalMs: 30_000,
   beats: [
-    { id: "night", startMs: 0, caption: "Once, the night held a quiet field…" },
-    { id: "seed", startMs: 5_500, caption: "A single seed waited beneath the soil." },
-    { id: "morning", startMs: 11_000, caption: "It reached for the morning light." },
-    { id: "answer", startMs: 17_000, caption: "And the world answered gently." },
-    { id: "intelligence", startMs: 23_000, caption: "Intelligence grew with every leaf." },
-    { id: "title", startMs: 27_000, caption: "" },
+    { id: "dawn", atMs: 0 },
+    { id: "spark", atMs: 5_500 },
+    { id: "bloom", atMs: 11_000 },
+    { id: "chorus", atMs: 17_000 },
+    { id: "title", atMs: 22_500 },
   ],
 };
 
-/** Warm return — short studio title card. */
-const WARM: BootProfile = {
+export const warmBootPlan: BootPlan = {
   mode: "warm",
-  durationMs: 4_000,
-  beats: [{ id: "title", startMs: 0, caption: "" }],
+  totalMs: 4_200,
+  beats: [{ id: "title", atMs: 0 }],
 };
 
-export function readBootProfile(): BootProfile {
-  const params = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
-  if (params?.get("boot") === "cold") {
-    try {
-      localStorage.removeItem(STORAGE_KEY);
-    } catch {
-      /* ignore */
-    }
-    return COLD;
-  }
-  const warm =
-    typeof localStorage !== "undefined" && localStorage.getItem(STORAGE_KEY) === "1";
-  return warm ? WARM : COLD;
-}
-
-export function markLaunched(): void {
-  try {
-    localStorage.setItem(STORAGE_KEY, "1");
-  } catch {
-    /* private mode */
-  }
-}
+export const openingCopy = {
+  cold: {
+    kicker: "Opening",
+    titleTag: "Growing intelligence. Growing tomorrow.",
+    captions: {
+      dawn: "Before the harvest… a quiet light.",
+      spark: "A spark finds the earth.",
+      bloom: "Life unfolds.",
+      chorus: "Nature and intelligence become one.",
+      title: "Welcome to momo.ai",
+    } satisfies Record<BeatId, string>,
+  },
+  warm: {
+    kicker: "Welcome back",
+    titleTag: "Growing intelligence. Growing tomorrow.",
+    captions: {
+      dawn: "",
+      spark: "",
+      bloom: "",
+      chorus: "",
+      title: "momo.ai",
+    } satisfies Record<BeatId, string>,
+  },
+} as const;
