@@ -28,7 +28,7 @@ export function buildRouter(deps: {
   const router = Router();
 
   router.get("/health", (_req, res) => {
-    res.json({ ok: true, service: "verdia-api", verdiaProvider: "mock-verdia" });
+    res.json({ ok: true, service: "momo-api", brand: "momo.ai", part: "opening" });
   });
 
   router.get("/devices", async (_req, res, next) => {

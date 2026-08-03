@@ -130,8 +130,8 @@ async function main() {
   }
 
   app.listen(PORT, "0.0.0.0", () => {
-    console.log(`[verdia-api] app ready at http://0.0.0.0:${PORT}`);
-    console.log(`[verdia-api] Verdia provider: mock-verdia (no public API)`);
+    console.log(`[momo-api] app ready at http://0.0.0.0:${PORT}`);
+    console.log(`[momo-api] opening UI served — brand: momo.ai`);
   });
 }
 
