@@ -4,7 +4,8 @@ import type { IngestTelemetry } from "../application/useCases.js";
 
 /**
  * Demo plant simulator so the UI works without a physical ESP32.
- * Disable with VERDIA_SIMULATOR=0.
+ * Started ONLY when VERDIA_MODE=demo (never in live).
+ * Disable within demo with VERDIA_SIMULATOR=0.
  */
 export function startDemoSimulator(
   ingest: IngestTelemetry,

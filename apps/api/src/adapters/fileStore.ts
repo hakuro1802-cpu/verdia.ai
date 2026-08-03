@@ -1,7 +1,11 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type {
+  AppNotification,
+  AuthSession,
   DeviceStatus,
+  Farm,
+  Field,
   PlantAnalysisResult,
   PumpCommand,
   TelemetrySample,
@@ -9,11 +13,19 @@ import type {
 import type {
   AnalysisRepository,
   DeviceRepository,
+  FarmRepository,
+  FieldRepository,
+  NotificationRepository,
+  SessionRepository,
   TelemetryRepository,
 } from "../domain/ports.js";
 import {
   InMemoryAnalysisRepository,
   InMemoryDeviceRepository,
+  InMemoryFarmRepository,
+  InMemoryFieldRepository,
+  InMemoryNotificationRepository,
+  InMemorySessionRepository,
   InMemoryTelemetryRepository,
 } from "./memoryStore.js";
 
@@ -22,6 +34,10 @@ type Snapshot = {
   devices: DeviceStatus[];
   commands: Record<string, PumpCommand[]>;
   analyses: PlantAnalysisResult[];
+  farms: Farm[];
+  fields: Field[];
+  notifications: AppNotification[];
+  sessions: AuthSession[];
 };
 
 /**
@@ -32,10 +48,18 @@ export class FileBackedStore {
   readonly telemetry: TelemetryRepository;
   readonly devices: DeviceRepository;
   readonly analyses: AnalysisRepository;
+  readonly farms: FarmRepository;
+  readonly fields: FieldRepository;
+  readonly notifications: NotificationRepository;
+  readonly sessions: SessionRepository;
 
   private readonly memTelemetry = new InMemoryTelemetryRepository();
   private readonly memDevices = new InMemoryDeviceRepository();
   private readonly memAnalyses = new InMemoryAnalysisRepository();
+  private readonly memFarms = new InMemoryFarmRepository();
+  private readonly memFields = new InMemoryFieldRepository();
+  private readonly memNotifications = new InMemoryNotificationRepository();
+  private readonly memSessions = new InMemorySessionRepository();
   private readonly filePath: string;
   private writeTimer: NodeJS.Timeout | null = null;
   private ready = false;
@@ -84,6 +108,81 @@ export class FileBackedStore {
       get: (id) => this.memAnalyses.get(id),
       list: (limit) => this.memAnalyses.list(limit),
     };
+
+    this.farms = {
+      create: async (farm) => {
+        const created = await this.memFarms.create(farm);
+        this.schedulePersist();
+        return created;
+      },
+      update: async (id, patch) => {
+        const updated = await this.memFarms.update(id, patch);
+        this.schedulePersist();
+        return updated;
+      },
+      get: (id) => this.memFarms.get(id),
+      list: () => this.memFarms.list(),
+      delete: async (id) => {
+        const ok = await this.memFarms.delete(id);
+        this.schedulePersist();
+        return ok;
+      },
+    };
+
+    this.fields = {
+      create: async (field) => {
+        const created = await this.memFields.create(field);
+        this.schedulePersist();
+        return created;
+      },
+      update: async (id, patch) => {
+        const updated = await this.memFields.update(id, patch);
+        this.schedulePersist();
+        return updated;
+      },
+      get: (id) => this.memFields.get(id),
+      listByFarm: (farmId) => this.memFields.listByFarm(farmId),
+      list: () => this.memFields.list(),
+      delete: async (id) => {
+        const ok = await this.memFields.delete(id);
+        this.schedulePersist();
+        return ok;
+      },
+    };
+
+    this.notifications = {
+      create: async (n) => {
+        const created = await this.memNotifications.create(n);
+        this.schedulePersist();
+        return created;
+      },
+      list: (limit) => this.memNotifications.list(limit),
+      markRead: async (id) => {
+        const updated = await this.memNotifications.markRead(id);
+        this.schedulePersist();
+        return updated;
+      },
+      get: (id) => this.memNotifications.get(id),
+    };
+
+    this.sessions = {
+      save: async (session) => {
+        const saved = await this.memSessions.save(session);
+        this.schedulePersist();
+        return saved;
+      },
+      get: (userId) => this.memSessions.get(userId),
+      delete: async (userId) => {
+        const ok = await this.memSessions.delete(userId);
+        this.schedulePersist();
+        return ok;
+      },
+    };
+  }
+
+  /** Expose memory telemetry for report aggregation. */
+  get telemetryMem(): InMemoryTelemetryRepository {
+    return this.memTelemetry;
   }
 
   async load(): Promise<void> {
@@ -98,15 +197,7 @@ export class FileBackedStore {
         }
       }
       for (const device of snap.devices ?? []) {
-        // restore pump/online if telemetry missed
-        if (!(await this.memDevices.get(device.deviceId))) {
-          await this.memDevices.enqueueCommand(device.deviceId, {
-            action: device.pumpOn ? "on" : "off",
-            source: "api",
-          });
-          await this.memDevices.consumeCommands(device.deviceId);
-          await this.memDevices.setPump(device.deviceId, device.pumpOn);
-        }
+        await this.memDevices.restoreDevice(device);
       }
       for (const [deviceId, cmds] of Object.entries(snap.commands ?? {})) {
         for (const cmd of cmds) {
@@ -115,6 +206,18 @@ export class FileBackedStore {
       }
       for (const analysis of snap.analyses ?? []) {
         await this.memAnalyses.save(analysis);
+      }
+      for (const farm of snap.farms ?? []) {
+        await this.memFarms.restore(farm);
+      }
+      for (const field of snap.fields ?? []) {
+        await this.memFields.restore(field);
+      }
+      for (const n of snap.notifications ?? []) {
+        await this.memNotifications.restore(n);
+      }
+      for (const s of snap.sessions ?? []) {
+        await this.memSessions.restore(s);
       }
     } catch (err) {
       const code = (err as NodeJS.ErrnoException).code;
@@ -133,19 +236,24 @@ export class FileBackedStore {
 
   private async persist() {
     const devices = await this.memDevices.list();
-    const telemetry: Record<string, TelemetrySample[]> = {};
-    for (const d of devices) {
-      telemetry[d.deviceId] = await this.memTelemetry.history(d.deviceId, 500);
-    }
-    // Also include devices that only have telemetry
-    // (already covered via device upsert on ingest)
+    const telemetry: Record<string, TelemetrySample[]> = this.memTelemetry.dump();
+    const analyses = await this.memAnalyses.list(200);
+    const commands = this.memDevices.pendingCommands();
+    const farms = await this.memFarms.list();
+    const fields = await this.memFields.list();
+    const notifications = await this.memNotifications.list(200);
+    const sessions = await this.memSessions.list();
 
-    const analyses = await this.memAnalyses.list(100);
-    const commands: Record<string, PumpCommand[]> = {};
-    // pending commands are consumed; nothing to dump unless we expose them —
-    // leave empty; in-flight cmds are short-lived
-
-    const snap: Snapshot = { telemetry, devices, commands, analyses };
+    const snap: Snapshot = {
+      telemetry,
+      devices,
+      commands,
+      analyses,
+      farms,
+      fields,
+      notifications,
+      sessions,
+    };
     await mkdir(path.dirname(this.filePath), { recursive: true });
     await writeFile(this.filePath, JSON.stringify(snap), "utf8");
   }
