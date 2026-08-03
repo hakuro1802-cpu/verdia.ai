@@ -1,66 +1,99 @@
-import { useEffect, useState } from "react";
-import { MomoWordmark } from "../../brand/MomoWordmark";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import { markLaunched, readBootProfile } from "../opening/bootTiming";
+import { createOpeningSoundscape } from "../opening/openingSound";
 import { OpeningAtmosphere } from "./OpeningAtmosphere";
 
-export type OpeningPhase = "boot" | "bloom" | "brand" | "ready";
+export type CinematicPhase = "dark" | "awaken" | "ecosystem" | "intelligence" | "transit";
 
 type Props = {
   onFinished: () => void;
 };
 
 /**
- * Part 1 — App opening.
- * Cinematic launch only: atmosphere → brand → enter.
+ * MOMO.AI cinematic opening — master boot sequence.
+ * Cold: 5s · Warm return: 1.5s · Morphs into Home (no spinner).
  */
 export function OpeningScreen({ onFinished }: Props) {
-  const [phase, setPhase] = useState<OpeningPhase>("boot");
+  const profile = useMemo(() => readBootProfile(), []);
+  const [phase, setPhase] = useState<CinematicPhase>("dark");
+  const [tilt, setTilt] = useState({ x: 0, y: 0 });
+  const reduced =
+    typeof window !== "undefined" &&
+    window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
 
   useEffect(() => {
+    const sound = createOpeningSoundscape();
+    void sound.start();
+
+    const { phases } = profile;
     const timers = [
-      window.setTimeout(() => setPhase("bloom"), 280),
-      window.setTimeout(() => setPhase("brand"), 1100),
-      window.setTimeout(() => setPhase("ready"), 2200),
+      window.setTimeout(() => setPhase("awaken"), phases.dark),
+      window.setTimeout(() => {
+        setPhase("ecosystem");
+        sound.pulse();
+      }, phases.awaken),
+      window.setTimeout(() => setPhase("intelligence"), phases.ecosystem),
+      window.setTimeout(() => {
+        setPhase("transit");
+        sound.pulse();
+      }, phases.intelligence),
+      window.setTimeout(() => {
+        markLaunched();
+        sound.stop();
+        onFinished();
+      }, phases.transit),
     ];
-    return () => timers.forEach(clearTimeout);
+
+    return () => {
+      timers.forEach(clearTimeout);
+      sound.stop();
+    };
+  }, [onFinished, profile]);
+
+  useEffect(() => {
+    const onOrient = (e: DeviceOrientationEvent) => {
+      const x = ((e.gamma ?? 0) / 45) * 6;
+      const y = (((e.beta ?? 45) - 45) / 45) * 4;
+      setTilt({ x: Math.max(-8, Math.min(8, x)), y: Math.max(-6, Math.min(6, y)) });
+    };
+    window.addEventListener("deviceorientation", onOrient);
+    return () => window.removeEventListener("deviceorientation", onOrient);
   }, []);
 
-  const wordmarkPhase =
-    phase === "boot" || phase === "bloom"
-      ? "hidden"
-      : phase === "brand"
-        ? "mark"
-        : "full";
-
   return (
-    <section className={`opening phase-${phase}`} aria-label="momo.ai opening">
-      <OpeningAtmosphere />
+    <section
+      className={`opening cinematic phase-${phase} mode-${profile.mode}`}
+      aria-label="MOMO.AI opening"
+      style={
+        {
+          "--tilt-x": `${tilt.x}px`,
+          "--tilt-y": `${tilt.y}px`,
+        } as CSSProperties
+      }
+    >
+      <OpeningAtmosphere phase={phase} reduced={!!reduced} />
       <div className="opening-veil" />
+      <div className="opening-bloom" />
 
       <div className="opening-stage">
-        <p className={`opening-kicker ${phase !== "boot" ? "show" : ""}`}>
-          welcome in
-        </p>
-
-        <MomoWordmark phase={wordmarkPhase} />
-
-        <p className={`opening-line ${phase === "ready" ? "show" : ""}`}>
-          Your plants, felt in real time.
-        </p>
-
-        <button
-          type="button"
-          className={`opening-enter ${phase === "ready" ? "show" : ""}`}
-          onClick={onFinished}
-          disabled={phase !== "ready"}
-        >
-          Open app
-        </button>
+        <div className="opening-brand-block">
+          <p className="cinematic-mark">MOMO.AI</p>
+          <p className="cinematic-tagline">
+            <span>Growing Intelligence.</span>
+            <span>Growing Tomorrow.</span>
+          </p>
+        </div>
       </div>
 
-      <div className="opening-progress" aria-hidden>
-        <span className={phase !== "boot" ? "on" : ""} />
-        <span className={phase === "brand" || phase === "ready" ? "on" : ""} />
-        <span className={phase === "ready" ? "on" : ""} />
+      <div className="opening-progress cinematic" aria-hidden>
+        <span className={phase !== "dark" ? "on" : ""} />
+        <span
+          className={
+            phase === "ecosystem" || phase === "intelligence" || phase === "transit" ? "on" : ""
+          }
+        />
+        <span className={phase === "intelligence" || phase === "transit" ? "on" : ""} />
+        <span className={phase === "transit" ? "on" : ""} />
       </div>
     </section>
   );

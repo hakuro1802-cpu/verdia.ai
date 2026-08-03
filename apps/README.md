@@ -20,9 +20,9 @@ npm start
 Preview: **port 8787** (`0.0.0.0`). Hard-refresh.  
 Replay full cinematic: `localStorage.removeItem('momo.ai.hasLaunched')` then reload.
 
-### Honest gaps (not fabricated)
-- Licensed nature bed + soft “Welcome to MOMO.” whisper — procedural ambience + activation tone for now  
-- Full Unreal volumetric forest — stylized spatial scene matching the phase brief
+### Honest gaps (assets not fabricated)
+- Licensed nature bed + soft “Welcome to MOMO.” whisper voice — procedural ambience + activation tone for now  
+- Full Unreal-grade volumetric forest — stylized spatial scene matching the phase brief
 
 ## Next
 Part 2 — Home live data into the glass panels.

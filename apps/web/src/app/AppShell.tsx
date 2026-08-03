@@ -1,19 +1,28 @@
-import { useState } from "react";
-import { AfterOpeningScreen } from "./screens/AfterOpeningScreen";
+import { useCallback, useState } from "react";
+import { HomeScreen } from "./screens/HomeScreen";
 import { OpeningScreen } from "./screens/OpeningScreen";
 
-export type AppScreen = "opening" | "after-opening";
+export type AppScreen = "opening" | "home";
 
 /**
- * App shell — screen routing only.
- * Part 1: opening. Later parts register new screens here.
+ * App shell — Part 1 opening morphs into Home.
  */
 export function AppShell() {
   const [screen, setScreen] = useState<AppScreen>("opening");
+  const [entering, setEntering] = useState(false);
 
-  if (screen === "opening") {
-    return <OpeningScreen onFinished={() => setScreen("after-opening")} />;
-  }
+  const finishOpening = useCallback(() => {
+    setEntering(true);
+    // Brief overlap so splash morphs into home without a blank frame
+    window.setTimeout(() => {
+      setScreen("home");
+      setEntering(false);
+    }, 180);
+  }, []);
 
-  return <AfterOpeningScreen />;
+  return (
+    <div className={`app-root ${entering ? "is-morphing" : ""}`}>
+      {screen === "opening" ? <OpeningScreen onFinished={finishOpening} /> : <HomeScreen />}
+    </div>
+  );
 }
