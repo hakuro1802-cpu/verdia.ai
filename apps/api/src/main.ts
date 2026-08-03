@@ -129,8 +129,8 @@ async function main() {
     console.log(`[verdia-api] demo simulator enabled for ${defaultDeviceId}`);
   }
 
-  app.listen(PORT, () => {
-    console.log(`[verdia-api] app ready at http://localhost:${PORT}`);
+  app.listen(PORT, "0.0.0.0", () => {
+    console.log(`[verdia-api] app ready at http://0.0.0.0:${PORT}`);
     console.log(`[verdia-api] Verdia provider: mock-verdia (no public API)`);
   });
 }

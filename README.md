@@ -4,14 +4,16 @@
 
 > There is **no public Verdia SDK/API**. Plant diagnostics use `MockVerdiaAnalyzer` (`isMock: true`), swappable when real contracts exist.
 
-## Run the completed app
+# Run the completed immersive app
 
 ```bash
 npm install
 npm start
 ```
 
-Open **http://localhost:8787** — dashboard, alerts, irrigation controls, camera analysis, and demo telemetry are all there.
+Open **http://localhost:8787** (cloud preview must use this port — the server binds `0.0.0.0`).
+
+The UI is a **full-viewport 3D greenhouse**: orbit the living plant, watch leaves respond to moisture, and trigger irrigation from the glass HUD.
 
 | Command | Purpose |
 |---------|---------|
