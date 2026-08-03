@@ -1,0 +1,23 @@
+{
+  "name": "verdia-ai",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Verdia AI Smart Plant Monitoring & Irrigation",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w @verdia/api & npm run dev -w @verdia/web",
+    "dev:api": "npm run dev -w @verdia/api",
+    "dev:web": "npm run dev -w @verdia/web",
+    "build": "npm run build -w @verdia/contracts && npm run build -w @verdia/api && npm run build -w @verdia/web",
+    "build:contracts": "npm run build -w @verdia/contracts",
+    "start:api": "npm run start -w @verdia/api",
+    "test": "npm run test -w @verdia/contracts && npm run test -w @verdia/api",
+    "typecheck": "npm run typecheck -w @verdia/contracts && npm run typecheck -w @verdia/api && npm run typecheck -w @verdia/web"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
