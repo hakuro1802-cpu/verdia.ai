@@ -5,7 +5,12 @@ import { FeatureState, mapErrorToState, type FeatureStateKind } from "../../shar
 
 async function fetchReports(period: ReportPeriod): Promise<ReportSummary[]> {
   const body = await apiFetch<{ items: ReportSummary[] } | ReportSummary>(
-    `/reports?period=${period}`,
+    "/reports",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ period }),
+    },
   );
   if (Array.isArray((body as { items?: ReportSummary[] }).items)) {
     return (body as { items: ReportSummary[] }).items;

@@ -34,7 +34,7 @@ export async function deleteFarm(id: string): Promise<void> {
 
 export async function listFields(farmId: string): Promise<Field[]> {
   const body = await apiFetch<{ fields: Field[] } | Field[]>(
-    `/farms/${encodeURIComponent(farmId)}/fields`,
+    `/fields?farmId=${encodeURIComponent(farmId)}`,
   );
   return Array.isArray(body) ? body : body.fields ?? [];
 }
@@ -43,9 +43,9 @@ export async function createField(
   farmId: string,
   input: { name: string; crop?: string | null },
 ): Promise<Field> {
-  return apiFetch<Field>(`/farms/${encodeURIComponent(farmId)}/fields`, {
+  return apiFetch<Field>(`/fields`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(input),
+    body: JSON.stringify({ ...input, farmId }),
   });
 }

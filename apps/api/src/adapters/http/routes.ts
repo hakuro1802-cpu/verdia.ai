@@ -107,6 +107,35 @@ export function buildRouter(deps: RouterDeps): Router {
     res.json(deps.getPlatformStatus.execute());
   });
 
+  /** Alias used by web shell */
+  router.get("/platform", (_req, res) => {
+    res.json(deps.getPlatformStatus.execute());
+  });
+
+  router.get("/dashboard", async (req, res, next) => {
+    try {
+      const deviceId =
+        typeof req.query.deviceId === "string" && req.query.deviceId
+          ? req.query.deviceId
+          : deps.defaultDeviceId;
+      const [devices, farms, notifications, aggregate] = await Promise.all([
+        deps.devices.list(),
+        deps.listFarms.execute(),
+        deps.listNotifications.execute(5),
+        deps.getDashboardAggregate.execute(deviceId),
+      ]);
+      res.json({
+        deviceCount: devices.length,
+        farmCount: farms.length,
+        onlineDevices: devices.filter((d) => d.online).length,
+        latestAlert: notifications[0]?.title ?? null,
+        aggregate,
+      });
+    } catch (e) {
+      next(e);
+    }
+  });
+
   /* —— Devices / telemetry —— */
 
   router.get("/devices", async (_req, res, next) => {
@@ -304,6 +333,27 @@ export function buildRouter(deps: RouterDeps): Router {
     }
   });
 
+  router.get("/farms/:id/fields", async (req, res, next) => {
+    try {
+      res.json({ fields: await deps.listFields.execute(req.params.id) });
+    } catch (e) {
+      next(e);
+    }
+  });
+
+  router.post("/farms/:id/fields", async (req, res, next) => {
+    try {
+      const parsed = createFieldSchema.parse({
+        ...req.body,
+        farmId: req.params.id,
+      });
+      const field = await deps.createField.execute(parsed);
+      res.status(201).json(field);
+    } catch (e) {
+      next(e);
+    }
+  });
+
   /* —— Fields —— */
 
   router.get("/fields", async (req, res, next) => {
@@ -356,7 +406,10 @@ export function buildRouter(deps: RouterDeps): Router {
 
   router.get("/weather", async (req, res, next) => {
     try {
-      const parsed = weatherQuerySchema.parse(req.query);
+      const parsed = weatherQuerySchema.parse({
+        latitude: req.query.latitude ?? req.query.lat,
+        longitude: req.query.longitude ?? req.query.lon,
+      });
       const data = await deps.fetchWeather.execute(parsed);
       res.json(data);
     } catch (e) {
@@ -399,6 +452,21 @@ export function buildRouter(deps: RouterDeps): Router {
       const parsed = reportSchema.parse(req.body);
       const report = await deps.generateReport.execute(parsed);
       res.status(201).json(report);
+    } catch (e) {
+      next(e);
+    }
+  });
+
+  router.get("/reports", async (req, res, next) => {
+    try {
+      const parsed = reportSchema.parse({
+        period: req.query.period ?? "daily",
+        farmId: typeof req.query.farmId === "string" ? req.query.farmId : null,
+        deviceId:
+          typeof req.query.deviceId === "string" ? req.query.deviceId : null,
+      });
+      const report = await deps.generateReport.execute(parsed);
+      res.json(report);
     } catch (e) {
       next(e);
     }
@@ -470,6 +538,24 @@ export function buildRouter(deps: RouterDeps): Router {
   router.post("/momo/ask", async (req, res, next) => {
     try {
       const parsed = momoAskSchema.parse(req.body);
+      const reply = await deps.askMomo.execute(parsed);
+      res.json(reply);
+    } catch (e) {
+      next(e);
+    }
+  });
+
+  /** Alias for web chat UI */
+  router.post("/momo/chat", async (req, res, next) => {
+    try {
+      const body = req.body ?? {};
+      const parsed = momoAskSchema.parse({
+        question: body.question ?? body.message,
+        locale: body.locale,
+        deviceId: body.deviceId,
+        latitude: body.latitude,
+        longitude: body.longitude,
+      });
       const reply = await deps.askMomo.execute(parsed);
       res.json(reply);
     } catch (e) {

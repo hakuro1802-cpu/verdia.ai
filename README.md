@@ -1,28 +1,46 @@
-# momo.ai
+# VERDIA.AI
 
-Smart agriculture OS — built **part by part**.
+Production-oriented intelligent agriculture platform. **momo.ai** is the evidence-based assistant.
 
-## Part 1 — Immersive cinematic opening (30s)
+## Architecture decision
 
-Disney / Pixar–inspired **2D cinema** (Canvas, 60fps):
+Clean Architecture with replaceable adapters:
 
-- Multi-plane world + slow camera push  
-- Plant character with squash/stretch, arcs, overlapping leaf action  
-- Dawn, godrays, fireflies, butterflies, fairy-dust title crest  
-- Film vignette + grain  
-- Letterboxed captions  
+| Layer | Location |
+|-------|----------|
+| Domain contracts | `packages/contracts` |
+| Application use cases | `apps/api/src/application` |
+| Ports | `apps/api/src/domain/ports.ts` |
+| Adapters | `apps/api/src/adapters` |
+| Presentation | `apps/web/src/features/*` |
 
-| Mode | Length |
-|------|--------|
-| Cold (first launch) | **30 seconds** |
-| Warm return | **~4 seconds** |
+**Live Mode (default):** never fabricates sensor values or AI diagnoses. Missing providers return honest `unavailable` states.
+
+**Demo Mode:** `VERDIA_MODE=demo` enables the labeled simulator and mock vision (`isMock: true`). Never used as Live.
+
+## Modules
+
+Auth (Guest + Firebase when configured) · Dashboard · Farms · Devices · Sensors · Camera · momo.ai · Recommendations · Weather · Reports · Notifications · ESP32 firmware
+
+## Run
 
 ```bash
 npm install
-npm start
+npm start                 # Live Mode on :8787
+VERDIA_MODE=demo npm start  # Demo Mode with simulator
 ```
 
-Preview **port 8787** · `/?boot=cold` · tap to unlock audio  
+Opening: `/?boot=cold` · App shell follows the cinematic opening.
 
-## Next
-Part 2 — Home live data.
+## Honest limits (no fabrication)
+
+| Capability | Live behavior without config |
+|------------|------------------------------|
+| Firebase Auth | Unavailable — Guest Mode works |
+| Vision disease model | Rejects blurry/empty images; analysis unavailable until `VERDIA_VISION_URL` |
+| Weather | Live via Open-Meteo (no key) + agricultural interpretation |
+| ESP32 | Real telemetry via `POST /api/v1/telemetry` — empty until a device reports |
+
+## Part 1
+
+Aurora Meadow cinematic opening (preserved).

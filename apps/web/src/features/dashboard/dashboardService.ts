@@ -70,7 +70,11 @@ export async function fetchDashboardCard(
     case "notifications":
       return apiFetchSettled("/notifications");
     case "reports":
-      return apiFetchSettled("/reports?period=daily");
+      return apiFetchSettled("/reports", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ period: "daily" }),
+      });
     case "analyses":
       return apiFetchSettled("/analysis");
     default:

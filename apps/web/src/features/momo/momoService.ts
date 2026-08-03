@@ -10,6 +10,7 @@ export async function sendMomoChat(input: {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
+      question: input.message,
       message: input.message,
       locale: input.locale ?? "en",
       conversationId: input.conversationId,

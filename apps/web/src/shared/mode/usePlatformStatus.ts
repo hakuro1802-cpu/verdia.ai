@@ -12,7 +12,7 @@ export type PlatformStatusState = {
 };
 
 const FALLBACK_STATUS: PlatformStatus = {
-  mode: "demo",
+  mode: "live",
   brand: "verdia.ai",
   assistant: "momo.ai",
   firebaseConfigured: false,
@@ -36,7 +36,7 @@ export function usePlatformStatus(): PlatformStatusState {
 
     void (async () => {
       try {
-        const data = await apiFetch<PlatformStatus>("/platform");
+        const data = await apiFetch<PlatformStatus>("/platform/status");
         if (cancelled) return;
         setStatus(data);
         setState("ready");
@@ -48,9 +48,9 @@ export function usePlatformStatus(): PlatformStatusState {
             ? e
             : new ApiError(e instanceof Error ? e.message : "Failed", { status: 0 });
         const mapped = mapErrorToState(err);
-        // Platform endpoint missing during parallel backend work — still allow shell with DEMO badge.
-        setStatus({ ...FALLBACK_STATUS, mode: "demo" });
-        setState(mapped.state === "offline" ? "offline" : "ready");
+        // Prefer honest LIVE fallback — never imply demo/simulated data without confirmation.
+        setStatus({ ...FALLBACK_STATUS });
+        setState(mapped.state === "offline" ? "offline" : "unavailable");
         setMessage(mapped.message);
       }
     })();
