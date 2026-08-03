@@ -44,11 +44,16 @@ const WARM: BootProfile = {
 
 export function readBootProfile(): BootProfile {
   const params = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
-  const forceCold = params?.get("boot") === "cold";
+  if (params?.get("boot") === "cold") {
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+    } catch {
+      /* ignore */
+    }
+    return COLD;
+  }
   const warm =
-    !forceCold &&
-    typeof localStorage !== "undefined" &&
-    localStorage.getItem(STORAGE_KEY) === "1";
+    typeof localStorage !== "undefined" && localStorage.getItem(STORAGE_KEY) === "1";
   return warm ? WARM : COLD;
 }
 
