@@ -142,7 +142,9 @@ export interface MomoAssistantPort {
     analysis?: PlantAnalysisResult | null;
     recommendation?: Recommendation | null;
     weather?: WeatherInterpretation | null;
-  }): MomoReply;
+    history?: Array<{ role: "user" | "assistant"; content: string }>;
+    sessionId?: string;
+  }): Promise<MomoReply> | MomoReply;
 }
 
 export interface PlatformStatusPort {

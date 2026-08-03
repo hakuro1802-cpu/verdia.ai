@@ -628,6 +628,15 @@ export class AskMomo {
     private readonly analyses: AnalysisRepository,
     private readonly recommendations: RecommendationPort,
     private readonly weather: WeatherPort,
+    private readonly memory?: {
+      append: (
+        sessionId: string,
+        turn: { role: "user" | "assistant" | "system"; content: string; at: string },
+      ) => void;
+      history: (
+        sessionId: string,
+      ) => Array<{ role: "user" | "assistant" | "system"; content: string; at: string }>;
+    },
   ) {}
 
   async execute(input: {
@@ -636,11 +645,18 @@ export class AskMomo {
     deviceId?: string;
     latitude?: number;
     longitude?: number;
+    sessionId?: string;
   }) {
     const latest = input.deviceId
       ? await this.telemetry.latest(input.deviceId)
       : null;
-    const analysis = (await this.analyses.list(1))[0] ?? null;
+    const analysisList = await this.analyses.list(5);
+    const analysis =
+      analysisList.find(
+        (a) => !a.rejected && !a.isMock && a.provider !== "unavailable",
+      ) ??
+      analysisList[0] ??
+      null;
 
     let weatherInterp: WeatherInterpretation | null = null;
     const loc =
@@ -664,18 +680,49 @@ export class AskMomo {
     const recommendation = this.recommendations.build({
       sensors: latest?.sensors ?? null,
       weather: weatherInterp,
-      analysis,
+      analysis:
+        analysis && !analysis.rejected && !analysis.isMock && analysis.provider !== "unavailable"
+          ? analysis
+          : null,
     });
 
-    return this.momo.reply({
-      question: input.question,
-      locale: input.locale ?? "en",
-      sensors: latest?.sensors ?? null,
-      validatedEvidence: validated,
-      analysis,
-      recommendation,
-      weather: weatherInterp,
+    const sessionId = input.sessionId?.trim() || "default";
+    const history =
+      this.memory
+        ?.history(sessionId)
+        .filter((t) => t.role === "user" || t.role === "assistant")
+        .map((t) => ({
+          role: t.role as "user" | "assistant",
+          content: t.content,
+        })) ?? [];
+
+    this.memory?.append(sessionId, {
+      role: "user",
+      content: input.question,
+      at: new Date().toISOString(),
     });
+
+    const reply = await Promise.resolve(
+      this.momo.reply({
+        question: input.question,
+        locale: input.locale ?? "en",
+        sensors: latest?.sensors ?? null,
+        validatedEvidence: validated,
+        analysis,
+        recommendation,
+        weather: weatherInterp,
+        history,
+        sessionId,
+      }),
+    );
+
+    this.memory?.append(sessionId, {
+      role: "assistant",
+      content: reply.message.content,
+      at: reply.message.createdAt,
+    });
+
+    return reply;
   }
 }
 

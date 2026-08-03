@@ -92,9 +92,10 @@ export const firebaseAuthSchema = z.object({
 });
 
 export const momoAskSchema = z.object({
-  question: z.string().min(1).max(2000),
+  question: z.string().min(1).max(4000),
   locale: z.enum(["en", "ta"]).optional(),
   deviceId: z.string().optional(),
   latitude: z.number().min(-90).max(90).optional(),
   longitude: z.number().min(-180).max(180).optional(),
+  sessionId: z.string().min(1).max(120).optional(),
 });

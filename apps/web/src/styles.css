@@ -1028,6 +1028,38 @@ select {
   color: var(--ink-soft);
 }
 
+.momo-meta-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-top: 0.45rem;
+}
+
+.momo-meta-row .momo-meta {
+  margin-top: 0 !important;
+}
+
+.momo-locale {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.momo-suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin: 0 0 1rem;
+}
+
+.momo-thread {
+  max-height: min(52vh, 28rem);
+  overflow: auto;
+  padding-right: 0.25rem;
+}
+
 .momo-composer {
   display: flex;
   flex-wrap: wrap;

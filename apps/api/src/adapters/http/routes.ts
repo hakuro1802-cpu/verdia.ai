@@ -616,7 +616,12 @@ export function buildRouter(deps: RouterDeps): Router {
 
   router.post("/momo/ask", async (req, res, next) => {
     try {
-      const parsed = momoAskSchema.parse(req.body);
+      const body = req.body ?? {};
+      const parsed = momoAskSchema.parse({
+        ...body,
+        question: body.question ?? body.message,
+        sessionId: body.sessionId ?? body.conversationId,
+      });
       const reply = await deps.askMomo.execute(parsed);
       res.json(reply);
     } catch (e) {
@@ -634,6 +639,7 @@ export function buildRouter(deps: RouterDeps): Router {
         deviceId: body.deviceId,
         latitude: body.latitude,
         longitude: body.longitude,
+        sessionId: body.sessionId ?? body.conversationId,
       });
       const reply = await deps.askMomo.execute(parsed);
       res.json(reply);

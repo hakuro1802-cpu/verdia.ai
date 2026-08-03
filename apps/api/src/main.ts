@@ -34,7 +34,7 @@ import {
   LocalRecommendationAdapter,
   LocalReportAdapter,
 } from "./adapters/recommendationAndReport.js";
-import { MomoTemplateAssistant } from "./adapters/momoAssistant.js";
+import { MomoConversationMemory, MomoMasterIntelligence } from "./adapters/momoAssistant.js";
 import {
   AnalyzePlantImage,
   AskMomo,
@@ -163,7 +163,13 @@ export async function createApp() {
   const quality = new ImageQualityChecker();
   const recommendations = new LocalRecommendationAdapter();
   const reports = new LocalReportAdapter();
-  const momo = new MomoTemplateAssistant();
+  const momo = new MomoMasterIntelligence();
+  const momoMemory = new MomoConversationMemory();
+  if (process.env.MOMO_LLM_API_KEY || process.env.OPENAI_API_KEY) {
+    console.log("[verdia-api] momo.ai: LLM provider configured");
+  } else {
+    console.log("[verdia-api] momo.ai: local Master Intelligence (set MOMO_LLM_API_KEY for deeper chat)");
+  }
 
   const guestAuth = new GuestAuthAdapter(sessions);
   const firebaseAuth = new FirebaseAuthAdapter(sessions, FIREBASE_PROJECT_ID || undefined);
@@ -253,6 +259,7 @@ export async function createApp() {
     analyses,
     recommendations,
     weather,
+    momoMemory,
   );
   const getPlatformStatus = new GetPlatformStatus(
     MODE,

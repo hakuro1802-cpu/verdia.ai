@@ -217,22 +217,23 @@ describe("Farms and fields", () => {
 });
 
 describe("momo.ai", () => {
-  it("refuses to guess without evidence", () => {
+  it("refuses to invent irrigation advice without evidence", async () => {
     const momo = new MomoTemplateAssistant();
-    const reply = momo.reply({
+    const reply = await momo.reply({
       question: "Should I water?",
       locale: "en",
     });
     assert.equal(reply.message.confidence, 0);
     assert.equal(reply.message.uncertain, true);
-    assert.match(reply.message.content, /will not guess/i);
+    assert.match(reply.message.content, /enough verified evidence|won't invent|will not invent|don't have/i);
   });
 
-  it("explains sensors with confidence when evidence present", () => {
+  it("explains sensors with confidence when evidence present", async () => {
     const momo = new MomoTemplateAssistant();
-    const reply = momo.reply({
+    const reply = await momo.reply({
       question: "What is my soil moisture?",
       locale: "en",
+      validatedEvidence: ["soilMoisturePct=22%(ok)"],
       sensors: {
         temperatureC: 28,
         humidityPct: 60,
@@ -246,6 +247,16 @@ describe("momo.ai", () => {
     });
     assert.ok((reply.message.confidence ?? 0) > 0.5);
     assert.match(reply.message.content, /22%/);
+  });
+
+  it("introduces itself as master companion", async () => {
+    const momo = new MomoTemplateAssistant();
+    const reply = await momo.reply({
+      question: "Who are you?",
+      locale: "en",
+    });
+    assert.match(reply.message.content, /momo\.ai/i);
+    assert.ok((reply.message.confidence ?? 0) > 0.8);
   });
 });
 
