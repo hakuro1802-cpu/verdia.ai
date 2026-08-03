@@ -160,11 +160,17 @@ body::before {
   .panel.controls {
     grid-column: span 5;
   }
+  .panel.alerts {
+    grid-column: span 12;
+  }
   .panel.chart {
     grid-column: span 7;
   }
   .panel.camera {
     grid-column: span 5;
+  }
+  .panel.history {
+    grid-column: span 12;
   }
 }
 
@@ -365,6 +371,109 @@ button.danger {
 .error {
   color: var(--danger);
   font-size: 0.9rem;
+}
+
+.toast {
+  position: fixed;
+  right: 1rem;
+  bottom: 1rem;
+  z-index: 20;
+  padding: 0.85rem 1.1rem;
+  border-radius: 14px;
+  background: rgba(12, 40, 26, 0.95);
+  border: 1px solid rgba(125, 206, 106, 0.45);
+  color: var(--ink);
+  box-shadow: var(--shadow);
+  animation: rise 0.25s ease both;
+}
+
+.alert-list,
+.history-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.65rem;
+}
+
+.alert {
+  display: grid;
+  gap: 0.2rem;
+  padding: 0.75rem 0.85rem;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: rgba(0, 0, 0, 0.22);
+}
+
+.alert strong {
+  font-size: 0.95rem;
+}
+
+.alert span {
+  color: var(--ink-muted);
+  font-size: 0.88rem;
+  line-height: 1.4;
+}
+
+.alert-warn {
+  border-color: rgba(226, 180, 92, 0.35);
+}
+
+.alert-danger {
+  border-color: rgba(224, 122, 106, 0.4);
+}
+
+.ok-hint {
+  color: var(--accent);
+}
+
+.history-list li {
+  padding: 0.8rem 0.9rem;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: rgba(0, 0, 0, 0.22);
+}
+
+.history-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.history-list p {
+  margin: 0.35rem 0;
+  color: var(--ink-muted);
+  font-size: 0.9rem;
+}
+
+.history-list time {
+  color: var(--ink-muted);
+  font-size: 0.78rem;
+}
+
+.health {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 0.2rem 0.5rem;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+}
+
+.health-healthy {
+  color: var(--accent);
+  border-color: rgba(125, 206, 106, 0.4);
+}
+
+.health-attention {
+  color: var(--warn);
+  border-color: rgba(226, 180, 92, 0.4);
+}
+
+.health-critical {
+  color: var(--danger);
+  border-color: rgba(224, 122, 106, 0.4);
 }
 
 .footer-note {

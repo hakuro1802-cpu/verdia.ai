@@ -1,7 +1,11 @@
 import cors from "cors";
 import express from "express";
+import path from "node:path";
+import { existsSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { ZodError } from "zod";
 import { MockVerdiaAnalyzer } from "./adapters/mockVerdiaAnalyzer.js";
+import { FileBackedStore } from "./adapters/fileStore.js";
 import {
   InMemoryAnalysisRepository,
   InMemoryDeviceRepository,
@@ -20,13 +24,46 @@ import {
 const PORT = Number(process.env.PORT ?? 8787);
 const DEFAULT_DEVICE_ID = process.env.VERDIA_DEVICE_ID ?? "ESP32_001";
 const SIMULATOR = process.env.VERDIA_SIMULATOR !== "0";
+const DATA_DIR = process.env.VERDIA_DATA_DIR ?? path.resolve(process.cwd(), "data");
+const USE_FILE_STORE = process.env.VERDIA_STORE !== "memory";
 
-export function createApp() {
-  const telemetry = new InMemoryTelemetryRepository();
-  const devices = new InMemoryDeviceRepository();
-  const analyses = new InMemoryAnalysisRepository();
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+function resolveWebDist(): string | null {
+  const candidates = [
+    process.env.VERDIA_WEB_DIST,
+    path.resolve(__dirname, "../../web/dist"), // from apps/api/dist → apps/web/dist
+    path.resolve(__dirname, "../../../apps/web/dist"),
+    path.resolve(process.cwd(), "apps/web/dist"),
+    path.resolve(process.cwd(), "../web/dist"),
+  ].filter(Boolean) as string[];
+
+  for (const candidate of candidates) {
+    if (existsSync(path.join(candidate, "index.html"))) return candidate;
+  }
+  return null;
+}
+
+export async function createApp() {
+  let telemetry: InMemoryTelemetryRepository | FileBackedStore["telemetry"];
+  let devices: InMemoryDeviceRepository | FileBackedStore["devices"];
+  let analyses: InMemoryAnalysisRepository | FileBackedStore["analyses"];
+
+  if (USE_FILE_STORE) {
+    const store = new FileBackedStore(DATA_DIR);
+    await store.load();
+    telemetry = store.telemetry;
+    devices = store.devices;
+    analyses = store.analyses;
+    console.log(`[verdia-api] file store: ${DATA_DIR}`);
+  } else {
+    telemetry = new InMemoryTelemetryRepository();
+    devices = new InMemoryDeviceRepository();
+    analyses = new InMemoryAnalysisRepository();
+    console.log("[verdia-api] memory store");
+  }
+
   const analyzer = new MockVerdiaAnalyzer();
-
   const ingestTelemetry = new IngestTelemetry(telemetry, devices);
   const getDashboard = new GetDeviceDashboard(telemetry, devices);
   const requestPump = new RequestPumpCommand(devices);
@@ -51,6 +88,18 @@ export function createApp() {
     }),
   );
 
+  const webDist = resolveWebDist();
+  if (webDist) {
+    app.use(express.static(webDist));
+    app.get("*", (req, res, next) => {
+      if (req.path.startsWith("/api/")) return next();
+      res.sendFile(path.join(webDist, "index.html"));
+    });
+    console.log(`[verdia-api] serving web UI from ${webDist}`);
+  } else {
+    console.log("[verdia-api] web dist not found — API only (run npm run build)");
+  }
+
   app.use(
     (
       err: unknown,
@@ -73,7 +122,7 @@ export function createApp() {
 }
 
 async function main() {
-  const { app, ingestTelemetry, defaultDeviceId } = createApp();
+  const { app, ingestTelemetry, defaultDeviceId } = await createApp();
 
   if (SIMULATOR) {
     startDemoSimulator(ingestTelemetry, defaultDeviceId);
@@ -81,7 +130,7 @@ async function main() {
   }
 
   app.listen(PORT, () => {
-    console.log(`[verdia-api] listening on http://localhost:${PORT}`);
+    console.log(`[verdia-api] app ready at http://localhost:${PORT}`);
     console.log(`[verdia-api] Verdia provider: mock-verdia (no public API)`);
   });
 }

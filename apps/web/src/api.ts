@@ -32,6 +32,13 @@ export async function sendPumpCommand(
   if (!res.ok) throw new Error(`pump command ${res.status}`);
 }
 
+export async function fetchAnalyses(limit = 10): Promise<PlantAnalysisResult[]> {
+  const res = await fetch(`${API_BASE}/analysis?limit=${limit}`);
+  if (!res.ok) throw new Error(`analysis list ${res.status}`);
+  const body = (await res.json()) as { items: PlantAnalysisResult[] };
+  return body.items;
+}
+
 export async function analyzeImage(params: {
   deviceId: string;
   file: Blob;

@@ -14,6 +14,7 @@ data/
 firmware/esp32/.pio/
 apps/web/dist/
 apps/api/dist/
+apps/api/data/
 packages/contracts/dist/
 *.pyc
 __pycache__/

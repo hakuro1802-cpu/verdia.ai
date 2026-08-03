@@ -5,9 +5,10 @@ import { analyzeImage } from "../api";
 type Props = {
   deviceId: string;
   sensors: SensorReading | null;
+  onAnalyzed?: () => void;
 };
 
-export function CameraPanel({ deviceId, sensors }: Props) {
+export function CameraPanel({ deviceId, sensors, onAnalyzed }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [streamReady, setStreamReady] = useState(false);
   const [preview, setPreview] = useState<string | null>(null);
@@ -86,6 +87,7 @@ export function CameraPanel({ deviceId, sensors }: Props) {
         longitude,
       });
       setResult(analysis);
+      onAnalyzed?.();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Analysis failed");
     } finally {
