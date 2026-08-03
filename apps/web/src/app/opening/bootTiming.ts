@@ -20,8 +20,8 @@ export const coldBootPlan: BootPlan = {
     { id: "dawn", atMs: 0 },
     { id: "spark", atMs: 5_500 },
     { id: "bloom", atMs: 11_000 },
-    { id: "chorus", atMs: 17_000 },
-    { id: "title", atMs: 22_500 },
+    { id: "chorus", atMs: 16_500 },
+    { id: "title", atMs: 20_500 },
   ],
 };
 

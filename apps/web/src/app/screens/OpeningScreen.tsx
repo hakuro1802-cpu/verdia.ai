@@ -143,16 +143,16 @@ export function OpeningScreen({ onFinished }: Props) {
     return null;
   }
 
-  // Title-forward: whisper early, strong mid, mega finale
+  // Title-forward: brand present early, crest owns the finale
   const titleClass =
-    beat === "title"
+    beat === "title" || plan.mode === "warm"
       ? "is-on is-mega"
       : beat === "chorus"
         ? "is-on is-strong"
         : beat === "bloom"
-          ? "is-on is-whisper"
-          : plan.mode === "warm"
-            ? "is-on is-mega"
+          ? "is-on is-rise"
+          : beat === "spark"
+            ? "is-on is-whisper"
             : "";
 
   return (
