@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { MomoMessage } from "@verdia/contracts";
 import { ApiError } from "../../shared/api/client";
 import { FeatureState, mapErrorToState, type FeatureStateKind } from "../../shared/ui/FeatureState";
@@ -12,28 +12,32 @@ export function MomoScreen() {
   const [state, setState] = useState<FeatureStateKind>("ready");
   const [message, setMessage] = useState<string | undefined>();
   const [busy, setBusy] = useState(false);
+  const lastFailedUserText = useRef<string | null>(null);
 
-  const send = async () => {
-    const text = draft.trim();
+  const sendText = async (text: string, opts?: { appendUser?: boolean }) => {
     if (!text || busy) return;
-    const userMsg: ChatItem = {
-      id: `u_${crypto.randomUUID()}`,
-      role: "user",
-      content: text,
-      locale: "en",
-      confidence: null,
-      evidenceIds: [],
-      createdAt: new Date().toISOString(),
-    };
-    setMessages((prev) => [...prev, userMsg]);
-    setDraft("");
+
+    if (opts?.appendUser !== false) {
+      const userMsg: ChatItem = {
+        id: `u_${crypto.randomUUID()}`,
+        role: "user",
+        content: text,
+        locale: "en",
+        confidence: null,
+        evidenceIds: [],
+        createdAt: new Date().toISOString(),
+      };
+      setMessages((prev) => [...prev, userMsg]);
+    }
     setBusy(true);
     setState("loading");
     setMessage(undefined);
+    lastFailedUserText.current = null;
 
     try {
       const reply = await sendMomoChat({ message: text });
       if (reply.availability.status === "unavailable") {
+        lastFailedUserText.current = text;
         setState("unavailable");
         setMessage(reply.availability.reason);
         return;
@@ -41,6 +45,7 @@ export function MomoScreen() {
       setMessages((prev) => [...prev, reply.message]);
       setState("ready");
     } catch (e) {
+      lastFailedUserText.current = text;
       const err =
         e instanceof ApiError
           ? e
@@ -51,6 +56,22 @@ export function MomoScreen() {
     } finally {
       setBusy(false);
     }
+  };
+
+  const send = async () => {
+    const text = draft.trim();
+    if (!text || busy) return;
+    setDraft("");
+    await sendText(text);
+  };
+
+  const retryLast = async () => {
+    const text = lastFailedUserText.current;
+    if (!text || busy) {
+      setState("ready");
+      return;
+    }
+    await sendText(text, { appendUser: false });
   };
 
   return (
@@ -88,7 +109,7 @@ export function MomoScreen() {
           <FeatureState
             state={state}
             message={message}
-            onRetry={state === "loading" ? undefined : () => setState("ready")}
+            onRetry={state === "loading" ? undefined : () => void retryLast()}
             compact
           />
         ) : null}
@@ -109,7 +130,7 @@ export function MomoScreen() {
           disabled={busy}
         />
         <button type="submit" className="btn btn-primary" disabled={busy || !draft.trim()}>
-          Send
+          {busy ? "Sending…" : "Send"}
         </button>
       </form>
     </main>

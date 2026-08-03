@@ -83,6 +83,11 @@ const SIMULATOR_ACTIVE =
 
 const VISION_URL = process.env.VERDIA_VISION_URL?.trim() || "";
 const FIREBASE_PROJECT_ID = process.env.FIREBASE_PROJECT_ID?.trim() || "";
+const FIREBASE_ADMIN_READY = Boolean(
+  process.env.FIREBASE_SERVICE_ACCOUNT_JSON?.trim() ||
+    process.env.GOOGLE_APPLICATION_CREDENTIALS?.trim(),
+);
+const TELEMETRY_TOKEN = process.env.VERDIA_TELEMETRY_TOKEN?.trim() || null;
 
 const DEFAULT_LOCATION: GeoPoint | null = parseDefaultLocation(
   process.env.VERDIA_DEFAULT_LAT,
@@ -252,7 +257,8 @@ export async function createApp() {
   const getPlatformStatus = new GetPlatformStatus(
     MODE,
     SIMULATOR_ACTIVE,
-    Boolean(FIREBASE_PROJECT_ID),
+    // Only true when Admin verify credentials exist — project id alone is not enough
+    FIREBASE_ADMIN_READY && Boolean(FIREBASE_PROJECT_ID),
     visionConfigured,
     () => weather.availability(),
     () => vision.availability(),
@@ -295,6 +301,7 @@ export async function createApp() {
       devices,
       analyses,
       defaultDeviceId: DEFAULT_DEVICE_ID,
+      telemetryToken: MODE === "live" ? TELEMETRY_TOKEN : null,
     }),
   );
 
@@ -326,6 +333,22 @@ export async function createApp() {
         res.status(404).json({ error: "not_found", message: "Farm not found" });
         return;
       }
+      if (message.startsWith("invalid_timestamp:")) {
+        res.status(400).json({
+          error: "invalid_timestamp",
+          message: message.replace(/^invalid_timestamp:\s*/, ""),
+        });
+        return;
+      }
+      if (message.startsWith("vision_provider_")) {
+        res.status(502).json({
+          error: "vision_provider_failed",
+          message:
+            "Vision provider failed. No diagnosis was invented. Retry with another image or check VERDIA_VISION_URL.",
+          detail: message,
+        });
+        return;
+      }
       const status = message.toLowerCase().includes("consent") ? 403 : 500;
       console.error(err);
       res.status(status).json({ error: message });
@@ -353,6 +376,13 @@ async function main() {
     console.log(`[verdia-api] demo simulator enabled for ${defaultDeviceId}`);
   } else if (mode === "live") {
     console.log("[verdia-api] live mode — simulator OFF (no fabricated telemetry)");
+    if (TELEMETRY_TOKEN) {
+      console.log("[verdia-api] live telemetry auth: X-Device-Token required");
+    } else {
+      console.log(
+        "[verdia-api] WARNING: VERDIA_TELEMETRY_TOKEN unset — telemetry ingest is open. Set a token before production.",
+      );
+    }
   }
 
   app.listen(PORT, "0.0.0.0", () => {

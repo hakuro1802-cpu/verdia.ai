@@ -1,8 +1,10 @@
 import { nanoid } from "nanoid";
 import {
+  detectFrozenSensors,
   interpretWeather,
   sanitizeSensorReading,
   validateSensorReading,
+  validateTimestamp,
   type AnalysisRequestMeta,
   type AppNotification,
   type AppMode,
@@ -46,22 +48,46 @@ export class IngestTelemetry {
   ) {}
 
   async execute(sample: TelemetrySample) {
+    const tsCheck = validateTimestamp(sample.timestamp);
+    if (!tsCheck.ok) {
+      throw new Error(`invalid_timestamp: ${tsCheck.reason}`);
+    }
+
     const validated = validateSensorReading(sample.sensors, sample.timestamp);
     const sanitized: TelemetrySample = {
       ...sample,
       sensors: sanitizeSensorReading(sample.sensors, sample.timestamp),
     };
+
+    const recent = await this.telemetry.history(sample.deviceId, 8);
+    const frozen = detectFrozenSensors([
+      { sensors: sanitized.sensors, timestamp: sanitized.timestamp },
+      ...recent.map((r) => ({ sensors: r.sensors, timestamp: r.timestamp })),
+    ]);
+
     await this.telemetry.save(sanitized);
     const status = await this.devices.upsertFromTelemetry(sanitized);
 
     if (this.notifications) {
       await maybeNotifyFromTelemetry(this.notifications, sanitized, status);
+      if (frozen.length > 0) {
+        await this.notifications.create(
+          makeNotification(
+            "system",
+            "Frozen sensor suspected",
+            `${sample.deviceId}: identical values for ${frozen.join(", ")} across recent samples. Check wiring or replace the probe.`,
+            sample.deviceId,
+          ),
+        );
+      }
     }
 
     return {
       sample: sanitized,
       status,
       validated,
+      frozenSensors: frozen,
+      timestampRejected: false as const,
     };
   }
 }
@@ -523,8 +549,14 @@ export class GenerateReport {
     }
 
     const analyses = await this.analyses.list(100);
-    // Only verified: exclude rejected; keep mock but reports adapter labels them
-    const verifiedAnalyses = analyses.filter((a) => !a.rejected);
+    // Verified only: exclude rejected, mock-labeled, and unavailable provider stubs
+    const verifiedAnalyses = analyses.filter(
+      (a) =>
+        !a.rejected &&
+        !a.isMock &&
+        a.provider !== "unavailable" &&
+        a.confidence > 0,
+    );
 
     return this.reports.generate({
       period: input.period,

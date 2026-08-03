@@ -9,6 +9,7 @@ export function DevicesScreen() {
   const [state, setState] = useState<FeatureStateKind>("loading");
   const [message, setMessage] = useState<string | undefined>();
   const [actionMsg, setActionMsg] = useState<string | null>(null);
+  const [busyKey, setBusyKey] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setState("loading");
@@ -17,6 +18,9 @@ export function DevicesScreen() {
       const items = await listDevices();
       setDevices(items);
       setState(items.length === 0 ? "empty" : "ready");
+      if (items.length === 0) {
+        setMessage("No verified device. Pair ESP32 or wait for telemetry.");
+      }
     } catch (e) {
       const err =
         e instanceof ApiError
@@ -33,13 +37,22 @@ export function DevicesScreen() {
   }, [load]);
 
   const pump = async (deviceId: string, action: "on" | "off" | "pulse") => {
+    const key = `${deviceId}:${action}`;
+    if (busyKey) return;
+    setBusyKey(key);
     setActionMsg(null);
     try {
-      await sendPumpCommand(deviceId, action, action === "pulse" ? 5000 : undefined);
-      setActionMsg(`Pump ${action} accepted for ${deviceId}`);
-      await load();
+      const result = await sendPumpCommand(deviceId, action, action === "pulse" ? 5000 : undefined);
+      setActionMsg(
+        result.queued
+          ? `Pump ${action} queued offline for ${deviceId}`
+          : `Pump ${action} accepted for ${deviceId}`,
+      );
+      if (!result.queued) await load();
     } catch (e) {
       setActionMsg(e instanceof Error ? e.message : "Pump command failed");
+    } finally {
+      setBusyKey(null);
     }
   };
 
@@ -76,14 +89,29 @@ export function DevicesScreen() {
                 </p>
               </div>
               <div className="device-actions">
-                <button type="button" className="btn btn-ghost" onClick={() => void pump(d.deviceId, "pulse")}>
-                  Pulse
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  disabled={busyKey != null}
+                  onClick={() => void pump(d.deviceId, "pulse")}
+                >
+                  {busyKey === `${d.deviceId}:pulse` ? "…" : "Pulse"}
                 </button>
-                <button type="button" className="btn btn-ghost" onClick={() => void pump(d.deviceId, "on")}>
-                  On
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  disabled={busyKey != null}
+                  onClick={() => void pump(d.deviceId, "on")}
+                >
+                  {busyKey === `${d.deviceId}:on` ? "…" : "On"}
                 </button>
-                <button type="button" className="btn btn-ghost" onClick={() => void pump(d.deviceId, "off")}>
-                  Off
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  disabled={busyKey != null}
+                  onClick={() => void pump(d.deviceId, "off")}
+                >
+                  {busyKey === `${d.deviceId}:off` ? "…" : "Off"}
                 </button>
               </div>
             </li>

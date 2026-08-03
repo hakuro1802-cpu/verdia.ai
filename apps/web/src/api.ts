@@ -25,7 +25,7 @@ export async function sendPumpCommand(
   deviceId: string,
   action: "on" | "off" | "pulse",
   durationMs?: number,
-): Promise<void> {
+): Promise<{ queued?: boolean }> {
   return devicesPump(deviceId, action, durationMs);
 }
 

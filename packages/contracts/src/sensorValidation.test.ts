@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { sanitizeSensorReading, validateSensorValue } from "./sensorValidation.js";
+import {
+  detectFrozenSensors,
+  sanitizeSensorReading,
+  validateSensorValue,
+} from "./sensorValidation.js";
 import { interpretWeather } from "./weatherIntelligence.js";
 import { buildRecommendation } from "./recommendationEngine.js";
 
@@ -68,4 +72,30 @@ test("recommendation uses moisture evidence", () => {
   });
   assert.ok(r.confidence > 0);
   assert.ok(r.evidence.some((e) => e.includes("moisture")));
+});
+
+test("rejects future timestamps", () => {
+  const future = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+  const v = validateSensorValue("temperatureC", 25, future);
+  assert.equal(v.status, "invalid");
+});
+
+test("detects frozen sensors", () => {
+  const sample = {
+    sensors: {
+      temperatureC: 22,
+      humidityPct: 50,
+      soilMoisturePct: 40,
+      soilMoistureRaw: 1,
+      soilPh: 6.5,
+      soilPhRaw: 1,
+      waterLevelPct: 60,
+      waterLevelRaw: 1,
+    },
+    timestamp: new Date().toISOString(),
+  };
+  const history = Array.from({ length: 6 }, () => sample);
+  const frozen = detectFrozenSensors(history);
+  assert.ok(frozen.includes("temperatureC"));
+  assert.ok(frozen.includes("soilMoisturePct"));
 });

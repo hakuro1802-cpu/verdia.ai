@@ -10,14 +10,23 @@ async function fetchNotifications(): Promise<AppNotification[]> {
   return Array.isArray(body) ? body : body.items ?? [];
 }
 
+async function markNotificationRead(id: string): Promise<AppNotification> {
+  return apiFetch<AppNotification>(`/notifications/${encodeURIComponent(id)}/read`, {
+    method: "POST",
+  });
+}
+
 export function NotificationsScreen() {
   const [items, setItems] = useState<AppNotification[]>([]);
   const [state, setState] = useState<FeatureStateKind>("loading");
   const [message, setMessage] = useState<string | undefined>();
+  const [readingId, setReadingId] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setState("loading");
     setMessage(undefined);
+    setActionError(null);
     try {
       const list = await fetchNotifications();
       setItems(list);
@@ -37,6 +46,20 @@ export function NotificationsScreen() {
     void load();
   }, [load]);
 
+  const onMarkRead = async (id: string) => {
+    if (readingId) return;
+    setReadingId(id);
+    setActionError(null);
+    try {
+      const updated = await markNotificationRead(id);
+      setItems((prev) => prev.map((n) => (n.id === id ? updated : n)));
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : "Could not mark as read");
+    } finally {
+      setReadingId(null);
+    }
+  };
+
   return (
     <main className="feature-screen">
       <header className="feature-screen__header">
@@ -50,6 +73,8 @@ export function NotificationsScreen() {
         </button>
       </header>
 
+      {actionError ? <p className="field-error">{actionError}</p> : null}
+
       <FeatureState
         state={state}
         message={message}
@@ -59,11 +84,27 @@ export function NotificationsScreen() {
         <ul className="notif-list">
           {items.map((n) => (
             <li key={n.id} className={n.read ? "is-read" : ""}>
-              <strong>{n.title}</strong>
-              <p>{n.body}</p>
-              <p className="muted">
-                {n.kind} · {new Date(n.createdAt).toLocaleString()}
-              </p>
+              <div className="notif-row">
+                <div>
+                  <strong>{n.title}</strong>
+                  <p>{n.body}</p>
+                  <p className="muted">
+                    {n.kind} · {new Date(n.createdAt).toLocaleString()}
+                  </p>
+                </div>
+                {!n.read ? (
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    disabled={readingId === n.id || readingId != null}
+                    onClick={() => void onMarkRead(n.id)}
+                  >
+                    {readingId === n.id ? "Marking…" : "Mark as read"}
+                  </button>
+                ) : (
+                  <span className="muted">Read</span>
+                )}
+              </div>
             </li>
           ))}
         </ul>

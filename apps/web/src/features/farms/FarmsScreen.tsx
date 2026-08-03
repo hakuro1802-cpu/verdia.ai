@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { Farm, Field } from "@verdia/contracts";
 import { ApiError } from "../../shared/api/client";
 import { FeatureState, mapErrorToState, type FeatureStateKind } from "../../shared/ui/FeatureState";
-import { createFarm, listFarms, listFields } from "./farmsService";
+import { createFarm, createField, listFarms, listFields } from "./farmsService";
 
 export function FarmsScreen() {
   const [farms, setFarms] = useState<Farm[]>([]);
@@ -11,7 +11,14 @@ export function FarmsScreen() {
   const [state, setState] = useState<FeatureStateKind>("loading");
   const [message, setMessage] = useState<string | undefined>();
   const [name, setName] = useState("");
-  const [busy, setBusy] = useState(false);
+  const [nameError, setNameError] = useState<string | null>(null);
+  const [fieldName, setFieldName] = useState("");
+  const [fieldCrop, setFieldCrop] = useState("");
+  const [fieldNameError, setFieldNameError] = useState<string | null>(null);
+  const [fieldsState, setFieldsState] = useState<FeatureStateKind>("ready");
+  const [fieldsMessage, setFieldsMessage] = useState<string | undefined>();
+  const [busyFarm, setBusyFarm] = useState(false);
+  const [busyField, setBusyField] = useState(false);
 
   const load = useCallback(async () => {
     setState("loading");
@@ -36,28 +43,45 @@ export function FarmsScreen() {
     void load();
   }, [load]);
 
+  const loadFields = useCallback(async (farmId: string) => {
+    setFieldsState("loading");
+    setFieldsMessage(undefined);
+    try {
+      const items = await listFields(farmId);
+      setFields(items);
+      setFieldsState(items.length === 0 ? "empty" : "ready");
+      if (items.length === 0) {
+        setFieldsMessage("No fields for this farm yet.");
+      }
+    } catch (e) {
+      const err =
+        e instanceof ApiError
+          ? e
+          : new ApiError(e instanceof Error ? e.message : "Failed", { status: 0 });
+      const mapped = mapErrorToState(err);
+      setFields([]);
+      setFieldsState(mapped.state);
+      setFieldsMessage(mapped.message);
+    }
+  }, []);
+
   useEffect(() => {
     if (!selected) {
       setFields([]);
+      setFieldsState("ready");
       return;
     }
-    let cancelled = false;
-    void (async () => {
-      try {
-        const items = await listFields(selected);
-        if (!cancelled) setFields(items);
-      } catch {
-        if (!cancelled) setFields([]);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [selected]);
+    void loadFields(selected);
+  }, [selected, loadFields]);
 
-  const onCreate = async () => {
-    if (!name.trim()) return;
-    setBusy(true);
+  const onCreateFarm = async () => {
+    if (busyFarm) return;
+    if (!name.trim()) {
+      setNameError("Farm name is required.");
+      return;
+    }
+    setNameError(null);
+    setBusyFarm(true);
     try {
       await createFarm({ name: name.trim() });
       setName("");
@@ -71,7 +95,36 @@ export function FarmsScreen() {
       setState(mapped.state);
       setMessage(mapped.message);
     } finally {
-      setBusy(false);
+      setBusyFarm(false);
+    }
+  };
+
+  const onCreateField = async () => {
+    if (!selected || busyField) return;
+    if (!fieldName.trim()) {
+      setFieldNameError("Field name is required.");
+      return;
+    }
+    setFieldNameError(null);
+    setBusyField(true);
+    try {
+      await createField(selected, {
+        name: fieldName.trim(),
+        crop: fieldCrop.trim() || null,
+      });
+      setFieldName("");
+      setFieldCrop("");
+      await loadFields(selected);
+    } catch (e) {
+      const err =
+        e instanceof ApiError
+          ? e
+          : new ApiError(e instanceof Error ? e.message : "Failed", { status: 0 });
+      const mapped = mapErrorToState(err);
+      setFieldsState(mapped.state);
+      setFieldsMessage(mapped.message);
+    } finally {
+      setBusyField(false);
     }
   };
 
@@ -88,14 +141,24 @@ export function FarmsScreen() {
       <div className="farm-create">
         <input
           value={name}
-          onChange={(e) => setName(e.target.value)}
+          onChange={(e) => {
+            setName(e.target.value);
+            if (nameError) setNameError(null);
+          }}
           placeholder="New farm name"
           aria-label="New farm name"
+          aria-invalid={Boolean(nameError)}
         />
-        <button type="button" className="btn btn-primary" disabled={busy} onClick={() => void onCreate()}>
-          Add farm
+        <button
+          type="button"
+          className="btn btn-primary"
+          disabled={busyFarm || !name.trim()}
+          onClick={() => void onCreateFarm()}
+        >
+          {busyFarm ? "Adding…" : "Add farm"}
         </button>
       </div>
+      {nameError ? <p className="field-error">{nameError}</p> : null}
 
       <FeatureState state={state} message={message} onRetry={() => void load()}>
         <div className="split-panels">
@@ -115,9 +178,44 @@ export function FarmsScreen() {
           </ul>
           <div className="entity-detail">
             <h2>Fields</h2>
-            {fields.length === 0 ? (
-              <FeatureState state="empty" message="No fields for this farm yet." compact />
-            ) : (
+            {selected ? (
+              <>
+                <div className="farm-create">
+                  <input
+                    value={fieldName}
+                    onChange={(e) => {
+                      setFieldName(e.target.value);
+                      if (fieldNameError) setFieldNameError(null);
+                    }}
+                    placeholder="New field name"
+                    aria-label="New field name"
+                    aria-invalid={Boolean(fieldNameError)}
+                  />
+                  <input
+                    value={fieldCrop}
+                    onChange={(e) => setFieldCrop(e.target.value)}
+                    placeholder="Crop (optional)"
+                    aria-label="Crop optional"
+                  />
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    disabled={busyField || !fieldName.trim()}
+                    onClick={() => void onCreateField()}
+                  >
+                    {busyField ? "Adding…" : "Add field"}
+                  </button>
+                </div>
+                {fieldNameError ? <p className="field-error">{fieldNameError}</p> : null}
+              </>
+            ) : null}
+
+            <FeatureState
+              state={fieldsState}
+              message={fieldsMessage}
+              onRetry={selected ? () => void loadFields(selected) : undefined}
+              compact
+            >
               <ul className="stat-list">
                 {fields.map((f) => (
                   <li key={f.id}>
@@ -126,7 +224,7 @@ export function FarmsScreen() {
                   </li>
                 ))}
               </ul>
-            )}
+            </FeatureState>
           </div>
         </div>
       </FeatureState>

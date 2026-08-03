@@ -15,6 +15,10 @@ const BOUNDS: Record<
 };
 
 const STALE_MS = 15 * 60 * 1000;
+/** Reject timestamps more than 2 minutes in the future (clock skew). */
+const FUTURE_SKEW_MS = 2 * 60 * 1000;
+/** Identical values across this many consecutive samples → frozen sensor. */
+export const FROZEN_SAMPLE_COUNT = 6;
 
 function readingFor(
   sensors: SensorReading,
@@ -38,6 +42,21 @@ function readingFor(
   }
 }
 
+export function validateTimestamp(
+  timestamp: string,
+  nowMs = Date.now(),
+): { ok: true; ageMs: number } | { ok: false; reason: string } {
+  const parsed = Date.parse(timestamp);
+  if (!Number.isFinite(parsed)) {
+    return { ok: false, reason: "Timestamp is not a valid ISO date" };
+  }
+  const ageMs = nowMs - parsed;
+  if (ageMs < -FUTURE_SKEW_MS) {
+    return { ok: false, reason: "Timestamp is too far in the future (clock skew)" };
+  }
+  return { ok: true, ageMs };
+}
+
 export function validateSensorValue(
   kind: SensorKind,
   value: number | null | undefined,
@@ -54,6 +73,16 @@ export function validateSensorValue(
     value: null as number | null,
   };
 
+  const ts = validateTimestamp(timestamp, nowMs);
+  if (!ts.ok) {
+    return {
+      ...base,
+      status: "invalid",
+      confidence: 0,
+      rejectionReason: ts.reason,
+    };
+  }
+
   if (value === null || value === undefined || Number.isNaN(value)) {
     return { ...base, status: "missing", confidence: 0 };
   }
@@ -67,8 +96,7 @@ export function validateSensorValue(
     };
   }
 
-  const age = nowMs - Date.parse(timestamp);
-  if (Number.isFinite(age) && age > STALE_MS) {
+  if (ts.ageMs > STALE_MS) {
     return {
       kind,
       value,
@@ -101,9 +129,53 @@ export function validateSensorReading(
   );
 }
 
+/**
+ * Detect frozen sensors: identical numeric value across recent history.
+ * Returns kinds that appear stuck.
+ */
+export function detectFrozenSensors(
+  history: Array<{ sensors: SensorReading; timestamp: string }>,
+  kinds: SensorKind[] = ["temperatureC", "humidityPct", "soilMoisturePct", "soilPh", "waterLevelPct"],
+  minSamples = FROZEN_SAMPLE_COUNT,
+): SensorKind[] {
+  if (history.length < minSamples) return [];
+  const window = history.slice(0, minSamples);
+  const frozen: SensorKind[] = [];
+
+  for (const kind of kinds) {
+    const values = window.map((h) => readingFor(h.sensors, kind));
+    if (values.some((v) => v == null || !Number.isFinite(v))) continue;
+    const first = values[0]!;
+    if (values.every((v) => v === first)) {
+      frozen.push(kind);
+    }
+  }
+  return frozen;
+}
+
 /** Strip invalid fields from a reading before persistence/display. */
-export function sanitizeSensorReading(sensors: SensorReading, timestamp: string): SensorReading {
-  const validated = validateSensorReading(sensors, timestamp);
+export function sanitizeSensorReading(
+  sensors: SensorReading,
+  timestamp: string,
+  nowMs = Date.now(),
+): SensorReading {
+  const ts = validateTimestamp(timestamp, nowMs);
+  if (!ts.ok) {
+    return {
+      temperatureC: null,
+      humidityPct: null,
+      soilMoisturePct: null,
+      soilMoistureRaw: sensors.soilMoistureRaw,
+      soilPh: null,
+      soilPhRaw: sensors.soilPhRaw,
+      waterLevelPct: null,
+      waterLevelRaw: sensors.waterLevelRaw,
+      lightLux: null,
+      rainMm: null,
+    };
+  }
+
+  const validated = validateSensorReading(sensors, timestamp, nowMs);
   const byKind = Object.fromEntries(validated.map((v) => [v.kind, v])) as Record<
     SensorKind,
     ValidatedSensorValue

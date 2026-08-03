@@ -1,12 +1,15 @@
 import type { PlantAnalysisResult, SensorReading } from "@verdia/contracts";
 import { apiFetch } from "../../shared/api/client";
+import {
+  blobToBase64,
+  enqueueOutbox,
+  isOfflineError,
+} from "../../shared/offline/outbox";
 import { assessImageQuality } from "./imageQuality";
-
-const DEFAULT_DEVICE = import.meta.env.VITE_DEVICE_ID ?? "ESP32_001";
 
 export type AnalysisUploadInput = {
   file: Blob;
-  deviceId?: string;
+  deviceId: string;
   sensors?: SensorReading | null;
   consentImage: boolean;
   consentLocation: boolean;
@@ -15,7 +18,7 @@ export type AnalysisUploadInput = {
 };
 
 export type UploadGateResult =
-  | { accepted: false; reason: string }
+  | { accepted: false; reason: string; queued?: boolean }
   | { accepted: true; result: PlantAnalysisResult };
 
 export async function listAnalyses(limit = 20): Promise<PlantAnalysisResult[]> {
@@ -29,30 +32,57 @@ export async function uploadAnalysis(input: AnalysisUploadInput): Promise<Upload
     return { accepted: false, reason: quality.reason };
   }
 
-  const deviceId = input.deviceId ?? DEFAULT_DEVICE;
-  const form = new FormData();
-  form.append("image", input.file, "plant.jpg");
-  form.append("deviceId", deviceId);
-  form.append("consentImage", String(input.consentImage));
-  form.append("consentLocation", String(input.consentLocation));
-  if (input.sensors) form.append("sensors", JSON.stringify(input.sensors));
+  const formFields: Record<string, string> = {
+    deviceId: input.deviceId,
+    consentImage: String(input.consentImage),
+    consentLocation: String(input.consentLocation),
+  };
+  if (input.sensors) formFields.sensors = JSON.stringify(input.sensors);
   if (
     input.consentLocation &&
     input.latitude != null &&
     input.longitude != null
   ) {
-    form.append("latitude", String(input.latitude));
-    form.append("longitude", String(input.longitude));
+    formFields.latitude = String(input.latitude);
+    formFields.longitude = String(input.longitude);
   }
 
-  const result = await apiFetch<PlantAnalysisResult>("/analysis", {
-    method: "POST",
-    body: form,
-  });
-
-  if (result.rejected && result.rejectionReason) {
-    return { accepted: false, reason: result.rejectionReason };
+  const form = new FormData();
+  form.append("image", input.file, "plant.jpg");
+  for (const [key, value] of Object.entries(formFields)) {
+    form.append(key, value);
   }
 
-  return { accepted: true, result };
+  try {
+    const result = await apiFetch<PlantAnalysisResult>("/analysis", {
+      method: "POST",
+      body: form,
+    });
+
+    if (result.rejected && result.rejectionReason) {
+      return { accepted: false, reason: result.rejectionReason };
+    }
+
+    return { accepted: true, result };
+  } catch (e) {
+    if (isOfflineError(e)) {
+      const imageBase64 = await blobToBase64(input.file);
+      enqueueOutbox({
+        kind: "analysis",
+        path: "/analysis",
+        payload: JSON.stringify({
+          formFields,
+          imageBase64,
+          imageName: "plant.jpg",
+          imageType: input.file.type || "image/jpeg",
+        }),
+      });
+      return {
+        accepted: false,
+        reason: "Offline — analysis queued for sync when back online.",
+        queued: true,
+      };
+    }
+    throw e;
+  }
 }

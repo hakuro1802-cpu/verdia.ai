@@ -49,7 +49,8 @@ export class LocalReportAdapter implements ReportPort {
     const analyses = input.analyses.filter((a) => {
       const t = Date.parse(a.createdAt);
       if (!Number.isFinite(t) || t < cutoff) return false;
-      if (a.rejected) return false;
+      if (a.rejected || a.isMock || a.provider === "unavailable") return false;
+      if (!(a.confidence > 0)) return false;
       return true;
     });
 
@@ -62,7 +63,18 @@ export class LocalReportAdapter implements ReportPort {
       .filter((v): v is number => v != null);
     const pumpOnCount = samples.filter((s) => s.pumpOn).length;
 
+    const missing: string[] = [];
+    if (samples.length === 0) missing.push("ESP32 / sensor telemetry for this period");
+    if (analyses.length === 0) missing.push("Accepted live camera analyses");
+    if (!input.weather) missing.push("Weather snapshot (optional context)");
+    if (input.farmId) {
+      missing.push(
+        `Farm filter ${input.farmId} is recorded on the report header; telemetry is still device-scoped until devices are linked to farms.`,
+      );
+    }
+
     if (samples.length === 0 && analyses.length === 0) {
+      const nextCollection = new Date(Date.now() + 60 * 60 * 1000).toISOString();
       return {
         id: `report_${nanoid(8)}`,
         period: input.period,
@@ -71,14 +83,35 @@ export class LocalReportAdapter implements ReportPort {
         deviceId: input.deviceId ?? null,
         sections: [
           {
-            title: "Data availability",
+            title: "Available information",
             facts: [
-              "No verified telemetry or analysis in this period — report cannot summarize field activity.",
+              "No verified telemetry or accepted live camera analyses in this period.",
+              "No averages, trends, or statistics were invented.",
+            ],
+          },
+          {
+            title: "Missing information",
+            facts: missing.length
+              ? missing
+              : ["Connect an ESP32 or complete a live camera analysis."],
+          },
+          {
+            title: "Minimum data required",
+            facts: [
+              "At least one validated sensor sample OR one accepted live vision analysis in the selected period.",
+              "Sensor values must pass physical bounds and timestamp checks.",
+            ],
+          },
+          {
+            title: "Next data collection",
+            facts: [
+              `Ensure the device posts telemetry, then regenerate after ${nextCollection}.`,
+              "Or capture a clear plant image once VERDIA_VISION_URL is configured.",
             ],
           },
         ],
         dataPointsUsed: 0,
-        note: "Honest empty report: no fabricated averages.",
+        note: "Honest empty report: insufficient verified historical data.",
       };
     }
 

@@ -33,23 +33,23 @@ export type DashboardBundle = {
 
 export type DashboardCardId = keyof DashboardBundle;
 
-const DEFAULT_DEVICE = import.meta.env.VITE_DEVICE_ID ?? "ESP32_001";
+export type DashboardLoadOpts = {
+  lat?: number;
+  lon?: number;
+  deviceId?: string;
+};
 
-function failedResult<T>(message: string): ApiResult<T> {
+function failedResult<T>(message: string, code = "unavailable"): ApiResult<T> {
   return {
     ok: false,
-    error: new ApiError(message, { status: 0, code: "unknown" }),
+    error: new ApiError(message, { status: 0, code }),
   };
 }
 
 export async function fetchDashboardCard(
   id: DashboardCardId,
-  opts?: { lat?: number; lon?: number; deviceId?: string },
+  opts?: DashboardLoadOpts,
 ): Promise<ApiResult<unknown>> {
-  const deviceId = opts?.deviceId ?? DEFAULT_DEVICE;
-  const lat = opts?.lat ?? 11.0;
-  const lon = opts?.lon ?? 78.0;
-
   switch (id) {
     case "overview":
       return apiFetchSettled("/dashboard");
@@ -57,10 +57,21 @@ export async function fetchDashboardCard(
       return apiFetchSettled("/devices");
     case "farms":
       return apiFetchSettled("/farms");
-    case "weather":
-      return apiFetchSettled(`/weather?lat=${lat}&lon=${lon}`);
-    case "sensors":
-      return apiFetchSettled(`/devices/${encodeURIComponent(deviceId)}/dashboard`);
+    case "weather": {
+      if (opts?.lat == null || opts?.lon == null) {
+        return failedResult("Location required", "unavailable");
+      }
+      return apiFetchSettled(`/weather?lat=${opts.lat}&lon=${opts.lon}`);
+    }
+    case "sensors": {
+      if (!opts?.deviceId) {
+        return failedResult(
+          "No verified device. Pair ESP32 or wait for telemetry.",
+          "unavailable",
+        );
+      }
+      return apiFetchSettled(`/devices/${encodeURIComponent(opts.deviceId)}/dashboard`);
+    }
     case "recommendations":
       return apiFetchSettled("/recommendations", {
         method: "POST",
@@ -85,7 +96,7 @@ export async function fetchDashboardCard(
 /** Load cards independently — each settles on its own (Promise.allSettled). */
 export async function loadDashboardCards(
   ids: DashboardCardId[],
-  opts?: { lat?: number; lon?: number; deviceId?: string },
+  opts?: DashboardLoadOpts,
 ): Promise<Record<DashboardCardId, ApiResult<unknown>>> {
   const settled = await Promise.allSettled(ids.map((id) => fetchDashboardCard(id, opts)));
   const out = {} as Record<DashboardCardId, ApiResult<unknown>>;
@@ -109,5 +120,3 @@ export async function fetchDeviceDashboard(deviceId: string) {
     history: TelemetrySample[];
   }>(`/devices/${encodeURIComponent(deviceId)}/dashboard`);
 }
-
-export { DEFAULT_DEVICE };

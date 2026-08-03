@@ -1,7 +1,13 @@
 import type { AuthSession } from "@verdia/contracts";
+import type { ServiceAvailability } from "@verdia/contracts";
 import { apiFetch } from "../../shared/api/client";
 
 const SESSION_KEY = "verdia.ai.session";
+
+export type AuthStatus = {
+  guest: ServiceAvailability;
+  firebase: ServiceAvailability;
+};
 
 export function readStoredSession(): AuthSession | null {
   try {
@@ -23,6 +29,10 @@ export function writeStoredSession(session: AuthSession | null): void {
   } catch {
     // Ignore storage failures.
   }
+}
+
+export async function fetchAuthStatus(): Promise<AuthStatus> {
+  return apiFetch<AuthStatus>("/auth/status");
 }
 
 export async function createGuestSession(): Promise<AuthSession> {
@@ -62,6 +72,21 @@ export async function ensureGuestSession(): Promise<AuthSession> {
   }
 }
 
+export async function createFirebaseSession(idToken: string): Promise<AuthSession> {
+  const session = await apiFetch<AuthSession>("/auth/firebase", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ idToken }),
+  });
+  writeStoredSession(session);
+  return session;
+}
+
 export function clearSession(): void {
   writeStoredSession(null);
+}
+
+/** True when the client has Firebase web config present. */
+export function isFirebaseClientConfigured(): boolean {
+  return Boolean(import.meta.env.VITE_FIREBASE_API_KEY?.trim());
 }

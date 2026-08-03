@@ -1,3 +1,4 @@
+import { useCallback, useEffect, useState } from "react";
 import type { AuthSession } from "@verdia/contracts";
 import type { AppMode } from "@verdia/contracts";
 import { AuthScreen } from "../features/auth/AuthScreen";
@@ -11,6 +12,13 @@ import { RecommendationsScreen } from "../features/recommendations/Recommendatio
 import { ReportsScreen } from "../features/reports/ReportsScreen";
 import { SensorsScreen } from "../features/sensors/SensorsScreen";
 import { WeatherScreen } from "../features/weather/WeatherScreen";
+import type { FeatureStateKind } from "../shared/ui/FeatureState";
+import {
+  flushOutbox,
+  getOutboxLength,
+  startOutboxSync,
+  subscribeOutbox,
+} from "../shared/offline/outbox";
 
 export type NavId =
   | "dashboard"
@@ -41,8 +49,11 @@ const NAV: Array<{ id: NavId; label: string }> = [
 
 type Props = {
   mode: AppMode;
+  platformState: FeatureStateKind;
+  platformMessage?: string;
+  onPlatformRetry: () => void;
   session: AuthSession | null;
-  onSession: (session: AuthSession) => void;
+  onSession: (session: AuthSession | null) => void;
   active: NavId;
   onNavigate: (id: NavId) => void;
 };
@@ -50,7 +61,7 @@ type Props = {
 function renderScreen(
   active: NavId,
   session: AuthSession | null,
-  onSession: (session: AuthSession) => void,
+  onSession: (session: AuthSession | null) => void,
   onNavigate: (id: NavId) => void,
 ) {
   switch (active) {
@@ -87,7 +98,50 @@ function renderScreen(
   }
 }
 
-export function MainShell({ mode, session, onSession, active, onNavigate }: Props) {
+function modeBadgeLabel(mode: AppMode, platformState: FeatureStateKind): string {
+  if (platformState === "loading") return "…";
+  return mode === "live" ? "LIVE" : "DEMO";
+}
+
+export function MainShell({
+  mode,
+  platformState,
+  platformMessage,
+  onPlatformRetry,
+  session,
+  onSession,
+  active,
+  onNavigate,
+}: Props) {
+  const [queued, setQueued] = useState(() => getOutboxLength());
+  const [flushing, setFlushing] = useState(false);
+  const [flushMsg, setFlushMsg] = useState<string | null>(null);
+
+  useEffect(() => startOutboxSync(), []);
+
+  useEffect(() => subscribeOutbox((entries) => setQueued(entries.length)), []);
+
+  const onFlush = useCallback(async () => {
+    if (flushing) return;
+    setFlushing(true);
+    setFlushMsg(null);
+    try {
+      const result = await flushOutbox();
+      setFlushMsg(
+        result.errors.length
+          ? `Flushed ${result.flushed}; ${result.remaining} left (${result.errors[0]})`
+          : `Flushed ${result.flushed}`,
+      );
+    } catch (e) {
+      setFlushMsg(e instanceof Error ? e.message : "Flush failed");
+    } finally {
+      setFlushing(false);
+    }
+  }, [flushing]);
+
+  const showOfflineBanner =
+    platformState === "offline" || platformState === "unavailable";
+
   return (
     <div className="main-shell">
       <div className="main-aurora" aria-hidden="true" />
@@ -97,14 +151,44 @@ export function MainShell({ mode, session, onSession, active, onNavigate }: Prop
           <p className="main-assistant">momo.ai</p>
         </div>
         <div className="main-topbar-meta">
-          <span className={`mode-badge mode-badge--${mode}`} title="Platform data mode">
-            {mode === "live" ? "LIVE" : "DEMO"}
+          {queued > 0 ? (
+            <span className="sync-chip" title="Offline outbox">
+              Sync: {queued} queued
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm"
+                disabled={flushing}
+                onClick={() => void onFlush()}
+              >
+                {flushing ? "Flushing…" : "Flush"}
+              </button>
+            </span>
+          ) : null}
+          {flushMsg ? <span className="sync-chip-msg muted">{flushMsg}</span> : null}
+          <span
+            className={`mode-badge mode-badge--${platformState === "loading" ? "live" : mode}`}
+            title="Platform data mode"
+          >
+            {modeBadgeLabel(mode, platformState)}
           </span>
           <button type="button" className="btn btn-ghost btn-sm" onClick={() => onNavigate("auth")}>
             {session?.isGuest ? "Guest · Auth" : session ? session.displayName : "Auth"}
           </button>
         </div>
       </header>
+
+      {showOfflineBanner ? (
+        <div className="offline-banner" role="alert">
+          <p>
+            {platformState === "offline"
+              ? platformMessage ?? "Platform unreachable — you appear offline."
+              : platformMessage ?? "Platform status unavailable."}
+          </p>
+          <button type="button" className="btn btn-ghost btn-sm" onClick={onPlatformRetry}>
+            Retry
+          </button>
+        </div>
+      ) : null}
 
       <div className="main-layout">
         <nav className="main-nav" aria-label="Primary">

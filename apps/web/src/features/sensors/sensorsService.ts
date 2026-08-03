@@ -1,9 +1,7 @@
 import type { DeviceStatus, TelemetrySample, ValidatedSensorValue } from "@verdia/contracts";
 import { apiFetch } from "../../shared/api/client";
 
-const DEFAULT_DEVICE = import.meta.env.VITE_DEVICE_ID ?? "ESP32_001";
-
-export async function fetchSensors(deviceId = DEFAULT_DEVICE): Promise<{
+export async function fetchSensors(deviceId: string): Promise<{
   status: DeviceStatus | null;
   latest: TelemetrySample | null;
   history: TelemetrySample[];
@@ -11,8 +9,6 @@ export async function fetchSensors(deviceId = DEFAULT_DEVICE): Promise<{
 }> {
   return apiFetch(`/devices/${encodeURIComponent(deviceId)}/dashboard`);
 }
-
-export { DEFAULT_DEVICE };
 
 /** Present only real values — never invent readings. */
 export function formatSensorValue(

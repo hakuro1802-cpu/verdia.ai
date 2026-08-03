@@ -82,6 +82,8 @@ export type RouterDeps = {
   devices: DeviceRepository;
   analyses: AnalysisRepository;
   defaultDeviceId: string;
+  /** When set, Live Mode telemetry requires matching X-Device-Token / Authorization Bearer. */
+  telemetryToken: string | null;
 };
 
 export function buildRouter(deps: RouterDeps): Router {
@@ -176,9 +178,86 @@ export function buildRouter(deps: RouterDeps): Router {
 
   router.post("/telemetry", async (req, res, next) => {
     try {
+      if (deps.telemetryToken) {
+        const header =
+          (typeof req.header("x-device-token") === "string"
+            ? req.header("x-device-token")
+            : null) ||
+          (typeof req.header("authorization") === "string"
+            ? req.header("authorization")!.replace(/^Bearer\s+/i, "")
+            : null);
+        if (!header || header !== deps.telemetryToken) {
+          res.status(401).json({
+            error: "unauthorized",
+            message:
+              "Telemetry requires a valid device token (X-Device-Token). Set VERDIA_TELEMETRY_TOKEN on the server and device.",
+          });
+          return;
+        }
+      }
       const parsed = telemetrySchema.parse(req.body);
       const result = await deps.ingestTelemetry.execute(parsed);
       res.status(201).json(result);
+    } catch (e) {
+      next(e);
+    }
+  });
+
+  /** Offline outbox flush — replay queued telemetry samples after reconnect. */
+  router.post("/sync/telemetry-batch", async (req, res, next) => {
+    try {
+      if (deps.telemetryToken) {
+        const header =
+          (typeof req.header("x-device-token") === "string"
+            ? req.header("x-device-token")
+            : null) ||
+          (typeof req.header("authorization") === "string"
+            ? req.header("authorization")!.replace(/^Bearer\s+/i, "")
+            : null);
+        if (!header || header !== deps.telemetryToken) {
+          res.status(401).json({
+            error: "unauthorized",
+            message: "Batch sync requires a valid device token.",
+          });
+          return;
+        }
+      }
+      const items = Array.isArray(req.body?.samples) ? req.body.samples : [];
+      if (items.length === 0) {
+        res.status(400).json({
+          error: "validation_failed",
+          message: "Provide samples: TelemetrySample[]",
+        });
+        return;
+      }
+      if (items.length > 100) {
+        res.status(400).json({
+          error: "validation_failed",
+          message: "Maximum 100 samples per batch",
+        });
+        return;
+      }
+      const accepted: unknown[] = [];
+      const rejected: Array<{ index: number; error: string }> = [];
+      for (let i = 0; i < items.length; i++) {
+        try {
+          const parsed = telemetrySchema.parse(items[i]);
+          accepted.push(await deps.ingestTelemetry.execute(parsed));
+        } catch (err) {
+          rejected.push({
+            index: i,
+            error: err instanceof Error ? err.message : "invalid_sample",
+          });
+        }
+      }
+      res.status(202).json({
+        accepted: accepted.length,
+        rejected,
+        message:
+          rejected.length === 0
+            ? "All queued samples ingested"
+            : "Some samples rejected — see rejected[]. No fabricated fills.",
+      });
     } catch (e) {
       next(e);
     }

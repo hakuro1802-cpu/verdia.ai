@@ -8,7 +8,7 @@ import type { PlantAnalysisPort } from "../domain/ports.js";
 
 /**
  * Honest live-mode stub when VERDIA_VISION_URL is not configured.
- * Never fabricates plant diagnoses.
+ * Always rejected — never enters "verified analysis" paths.
  */
 export class UnavailableVisionAnalyzer implements PlantAnalysisPort {
   async analyze(
@@ -31,12 +31,15 @@ export class UnavailableVisionAnalyzer implements PlantAnalysisPort {
       diagnosis:
         "Vision analysis is unavailable. Configure VERDIA_VISION_URL for live plant analysis.",
       careTips: [
-        "Set VERDIA_VISION_URL to your vision provider endpoint.",
-        "In demo mode (VERDIA_MODE=demo), mock analysis is used instead.",
+        "Set VERDIA_VISION_URL to your vision provider HTTPS endpoint.",
+        "Capture another image after the provider is configured.",
+        "Until then, use sensor + weather evidence for recommendations.",
       ],
       confidence: 0,
       isMock: false,
-      rejected: false,
+      rejected: true,
+      rejectionReason:
+        "Vision provider not configured (VERDIA_VISION_URL). Analysis rejected — no diagnosis invented.",
       evidence: ["provider_not_configured"],
     };
   }
@@ -50,9 +53,11 @@ export class UnavailableVisionAnalyzer implements PlantAnalysisPort {
   }
 }
 
+const CONFIDENCE_FLOOR = 0.45;
+
 /**
- * Optional remote vision client when VERDIA_VISION_URL is set.
- * Posts multipart image + meta; expects PlantAnalysisResult JSON.
+ * Remote vision client when VERDIA_VISION_URL is set.
+ * Validates provider JSON; rejects low-confidence or mock-labeled live results.
  */
 export class HttpVisionAnalyzer implements PlantAnalysisPort {
   constructor(
@@ -86,15 +91,70 @@ export class HttpVisionAnalyzer implements PlantAnalysisPort {
     const res = await this.fetchImpl(this.endpoint, {
       method: "POST",
       body: form,
+      signal: AbortSignal.timeout(45_000),
     });
     if (!res.ok) {
       throw new Error(`vision_provider_http_${res.status}`);
     }
-    const result = (await res.json()) as PlantAnalysisResult;
+
+    const raw = (await res.json()) as Partial<PlantAnalysisResult>;
+    const confidence =
+      typeof raw.confidence === "number" && Number.isFinite(raw.confidence)
+        ? raw.confidence
+        : 0;
+
+    if (raw.isMock === true) {
+      return {
+        id: typeof raw.id === "string" ? raw.id : nanoid(),
+        createdAt: new Date().toISOString(),
+        provider: "unavailable",
+        plantName: null,
+        health: "unknown",
+        diagnosis: "Vision provider returned a mock-labeled result in Live Mode.",
+        careTips: ["Use a production vision endpoint that does not return isMock:true."],
+        confidence: 0,
+        isMock: true,
+        rejected: true,
+        rejectionReason: "Mock-labeled vision result rejected in Live Mode.",
+        evidence: ["provider_returned_mock"],
+      };
+    }
+
+    if (confidence < CONFIDENCE_FLOOR) {
+      return {
+        id: typeof raw.id === "string" ? raw.id : nanoid(),
+        createdAt: new Date().toISOString(),
+        provider: "verdia",
+        plantName: raw.plantName ?? null,
+        health: "unknown",
+        diagnosis: raw.diagnosis ?? "Low confidence analysis",
+        careTips: ["Capture a sharper, closer image in good light and retry."],
+        confidence,
+        isMock: false,
+        rejected: true,
+        rejectionReason: `Confidence ${confidence} below threshold ${CONFIDENCE_FLOOR}. Please capture another image.`,
+        evidence: Array.isArray(raw.evidence) ? raw.evidence : [],
+      };
+    }
+
+    if (!raw.diagnosis || typeof raw.diagnosis !== "string") {
+      throw new Error("vision_provider_invalid_payload");
+    }
+
     return {
-      ...result,
-      provider: result.provider ?? "verdia",
+      id: typeof raw.id === "string" ? raw.id : nanoid(),
+      createdAt:
+        typeof raw.createdAt === "string" ? raw.createdAt : new Date().toISOString(),
+      provider: "verdia",
+      analysisType: raw.analysisType,
+      plantName: raw.plantName ?? null,
+      health: raw.health ?? "unknown",
+      diagnosis: raw.diagnosis,
+      careTips: Array.isArray(raw.careTips) ? raw.careTips : [],
+      confidence,
       isMock: false,
+      rejected: false,
+      evidence: Array.isArray(raw.evidence) ? raw.evidence : [],
     };
   }
 }

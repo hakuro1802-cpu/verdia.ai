@@ -48,6 +48,9 @@ export function AppShell() {
       ) : (
         <MainShell
           mode={platform.mode}
+          platformState={platform.state}
+          platformMessage={platform.message}
+          onPlatformRetry={platform.refresh}
           session={session}
           onSession={setSession}
           active={nav}

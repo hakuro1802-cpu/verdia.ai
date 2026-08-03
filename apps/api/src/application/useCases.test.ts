@@ -181,6 +181,8 @@ describe("VisionPipeline", () => {
     assert.equal(result.provider, "unavailable");
     assert.equal(result.confidence, 0);
     assert.equal(result.isMock, false);
+    assert.equal(result.rejected, true);
+    assert.ok(result.rejectionReason);
   });
 });
 

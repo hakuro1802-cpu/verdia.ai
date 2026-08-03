@@ -37,10 +37,12 @@ export function buildRecommendation(input: RecommendationInput): Recommendation 
   if (humidity != null) evidence.push(`Humidity ${humidity}%RH`);
   if (input.crop) evidence.push(`Crop: ${input.crop}`);
   if (input.growthStage) evidence.push(`Growth stage: ${input.growthStage}`);
-  if (input.analysis && !input.analysis.rejected && !input.analysis.isMock) {
+  if (input.analysis && !input.analysis.rejected && !input.analysis.isMock && input.analysis.provider !== "unavailable") {
     evidence.push(`Camera: ${input.analysis.diagnosis} (confidence ${input.analysis.confidence})`);
   } else if (input.analysis?.isMock) {
     evidence.push("Camera result labeled mock — not used as scientific evidence");
+  } else if (input.analysis?.rejected || input.analysis?.provider === "unavailable") {
+    // Explicitly not evidence
   }
   if (input.weather) {
     for (const impact of input.weather.impacts) {

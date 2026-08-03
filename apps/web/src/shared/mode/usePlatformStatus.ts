@@ -62,7 +62,7 @@ export function usePlatformStatus(): PlatformStatusState {
 
   return {
     status,
-    mode: status?.mode ?? "demo",
+    mode: status?.mode ?? "live",
     state,
     message,
     refresh,
